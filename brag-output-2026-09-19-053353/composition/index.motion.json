@@ -1,0 +1,12 @@
+{
+  "duration": 25,
+  "assertions": [
+    {"kind":"appearsBy","selector":"#hook","bySec":1.6},
+    {"kind":"appearsBy","selector":"#hit","bySec":2.9},
+    {"kind":"appearsBy","selector":"#payload","bySec":7.6},
+    {"kind":"appearsBy","selector":"#lockup","bySec":19},
+    {"kind":"staysInFrame","selector":"#hit"},
+    {"kind":"staysInFrame","selector":"#payload"},
+    {"kind":"keepsMoving","withinSelector":"#root","maxStaticSec":2.1}
+  ]
+}

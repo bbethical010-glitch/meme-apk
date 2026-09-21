@@ -1,0 +1,389 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Chivo:ital,wght@0,100..900;1,100..900&family=Oswald:wght@200..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary-fixed: #efdbff;
+  --color-outline: #988ca1;
+  --color-tertiary-fixed-dim: #ffb1c0;
+  --color-on-background: #e5e2e1;
+  --color-on-primary-container: #fdf2ff;
+  --color-tertiary-fixed: #ffd9df;
+  --color-inverse-on-surface: #313030;
+  --color-on-tertiary-fixed-variant: #90003d;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+  --color-background: #131313;
+  --color-surface-container-low: #1c1b1b;
+  --color-on-primary: #480082;
+  --color-secondary-fixed-dim: #f1c100;
+  --color-on-tertiary: #660029;
+  --color-secondary: #ffe399;
+  --color-on-tertiary-fixed: #3f0017;
+  --color-on-primary-fixed-variant: #6700b5;
+  --color-on-surface-variant: #cfc2d8;
+  --color-on-primary-fixed: #2b0052;
+  --color-on-surface: #e5e2e1;
+  --color-error: #ffb4ab;
+  --color-inverse-surface: #e5e2e1;
+  --color-surface-dim: #131313;
+  --color-surface-container-lowest: #0e0e0e;
+  --color-on-secondary: #3d2f00;
+  --color-on-secondary-fixed: #241a00;
+  --color-primary: #dcb8ff;
+  --color-secondary-container: #f4c300;
+  --color-primary-container: #9b30ff;
+  --color-tertiary: #ffb1c0;
+  --color-surface-tint: #dcb8ff;
+  --color-surface-container-highest: #353534;
+  --color-surface-bright: #3a3939;
+  --color-primary-fixed-dim: #dcb8ff;
+  --color-surface-variant: #353534;
+  --color-inverse-primary: #8701ec;
+  --color-on-tertiary-container: #fff2f3;
+  --color-surface-container: #201f1f;
+  --color-on-error: #690005;
+  --color-surface-container-high: #2a2a2a;
+  --color-secondary-fixed: #ffe08b;
+  --color-tertiary-container: #dd0061;
+  --color-on-secondary-fixed-variant: #584400;
+  --color-on-secondary-container: #685200;
+  --color-surface: #131313;
+  --color-outline-variant: #4d4355;
+
+  --spacing-xs: 8px;
+  --spacing-shadow-offset: 4px;
+  --spacing-md: 24px;
+  --spacing-lg: 40px;
+  --spacing-sm: 16px;
+  --spacing-base: 4px;
+  --spacing-border-width: 3px;
+  --spacing-xl: 64px;
+
+  --font-headline-lg: Anton;
+  --font-label-md: Oswald;
+  --font-label-xl: Oswald;
+  --font-body-md: Chivo;
+  --font-headline-lg-mobile: Anton;
+  --font-headline-xl: Anton;
+
+  --animate-shimmer: shimmer 2s infinite linear;
+  --animate-pulse-brutal: pulse-brutal 1s ease-in-out infinite;
+  --animate-pulse-fast: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-flicker: flicker 1.5s infinite alternate;
+  --animate-erratic-countdown: erratic 3s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-brutal {
+  0%, 100% { transform: scale(1); box-shadow: 4px 4px 0px 0px #dd0061; }
+  50% { transform: scale(1.02); box-shadow: 8px 8px 0px 0px #dd0061; }
+}
+
+@keyframes flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0; }
+}
+
+@keyframes erratic {
+  0% { content: "'03.14'"; }
+  10% { content: "'99.99'"; }
+  20% { content: "'42.00'"; }
+  30% { content: "'00.01'"; }
+  40% { content: "'ERR'"; }
+  50% { content: "'69.69'"; }
+  60% { content: "'13.37'"; }
+  70% { content: "'88.88'"; }
+  80% { content: "'00.00'"; }
+  90% { content: "'WAIT'"; }
+  100% { content: "'03.14'"; }
+}
+
+:root {
+  background-color: #131313;
+}
+
+html {
+  background-color: #131313;
+}
+
+body {
+  background-color: #131313;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--color-on-background);
+  min-height: max(884px, 100dvh);
+}
+
+.text-stroke-yellow {
+  -webkit-text-stroke: 1px var(--color-secondary-container);
+}
+
+.neo-shadow-pink {
+  text-shadow: 4px 4px 0px var(--color-tertiary);
+}
+
+.loading-shimmer {
+  background: linear-gradient(90deg, #1A1A1A 25%, #9B30FF 50%, #FF2D78 75%, #1A1A1A 100%);
+  background-size: 200% 100%;
+  animation: shimmer 0.8s infinite linear;
+}
+
+.timer-erratic::after {
+  content: "03.14";
+  animation: erratic 3s infinite;
+}
+
+.glitch-text {
+  text-shadow: 2px 2px 0px #f4c300, -2px -2px 0px #dd0061;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.animate-shake {
+  animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shake {
+  10%, 90% { transform: translate3d(-3px, 0, 0); }
+  20%, 80% { transform: translate3d(6px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-8px, 0, 0); }
+  40%, 60% { transform: translate3d(8px, 0, 0); }
+}
+
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+}
+
+/* === REACTION PICKER === */
+@keyframes reaction-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.4); opacity: 1; }
+  70% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes reaction-float {
+  0% { transform: scale(1) translateY(0); opacity: 1; }
+  60% { transform: scale(2.5) translateY(-60px); opacity: 0.9; }
+  100% { transform: scale(3) translateY(-120px); opacity: 0; }
+}
+
+.animate-reaction-pop {
+  animation: reaction-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-reaction-float {
+  animation: reaction-float 0.8s ease-out forwards;
+}
+
+/* === SWIPE TRANSITIONS (Instagram Reels-style) === */
+@keyframes reel-enter-from-bottom {
+  0% {
+    transform: translateY(60%) scale(0.92);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes reel-exit-to-top {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(-40%) scale(0.88);
+    opacity: 0;
+  }
+}
+
+@keyframes reel-enter-from-top {
+  0% {
+    transform: translateY(-60%) scale(0.92);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes reel-exit-to-bottom {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: translateY(40%) scale(0.88);
+    opacity: 0;
+  }
+}
+
+.animate-reel-in-up {
+  animation: reel-enter-from-bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-reel-out-up {
+  animation: reel-exit-to-top 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+.animate-reel-in-down {
+  animation: reel-enter-from-top 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-reel-out-down {
+  animation: reel-exit-to-bottom 0.3s cubic-bezier(0.7, 0, 0.84, 0) forwards;
+}
+
+/* === SWIPE HINT === */
+@keyframes swipe-hint-pulse {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(-10px); opacity: 0.9; }
+}
+
+.animate-swipe-hint {
+  animation: swipe-hint-pulse 2.5s ease-in-out infinite;
+}
+
+/* === QUEUE INDICATOR === */
+@keyframes queue-fill {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
+.queue-dot-filled {
+  background: var(--color-secondary-container);
+  animation: reaction-pop 0.3s ease forwards;
+}
+
+/* === ACTION COLUMN (Reels-style, Neo-Brutalist Theme) === */
+.action-col-btn {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--color-background);
+  background: var(--color-surface-container-high);
+  transition: all 0.15s ease;
+  cursor: pointer;
+  box-shadow: 4px 4px 0px 0px var(--color-primary-container);
+}
+
+.action-col-btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+
+.action-col-btn-label {
+  font-family: Oswald, sans-serif;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  margin-top: 2px;
+  color: var(--color-on-surface);
+}
+
+/* === FLOATING ACTION RAIL (translucent overlay) === */
+.floating-action-btn {
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.floating-action-btn:active {
+  transform: scale(0.88);
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.floating-action-label {
+  font-family: Oswald, sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* === SWIPE CONTAINER === */
+.swipe-container {
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+  will-change: transform;
+  overflow: hidden;
+}
+
+/* === STACKED MEME CARD DECK === */
+:root {
+  /* Position 0 (Active Front Card) */
+  --deck-pos-0-scale: 1.0;
+  --deck-pos-0-translate-y: 0px;
+  --deck-pos-0-translate-z: 0px;
+  --deck-pos-0-opacity: 1.0;
+  --deck-pos-0-z-index: 40;
+  --deck-pos-0-shadow: 8px 8px 0px #f4c300;
+
+  /* Position 1 (Second Card) */
+  --deck-pos-1-scale: 0.95;
+  --deck-pos-1-translate-y: 18px;
+  --deck-pos-1-translate-z: -40px;
+  --deck-pos-1-opacity: 0.9;
+  --deck-pos-1-z-index: 30;
+  --deck-pos-1-shadow: 6px 6px 0px #9b30ff;
+
+  /* Position 2 (Third Card) */
+  --deck-pos-2-scale: 0.90;
+  --deck-pos-2-translate-y: 34px;
+  --deck-pos-2-translate-z: -80px;
+  --deck-pos-2-opacity: 0.75;
+  --deck-pos-2-z-index: 20;
+  --deck-pos-2-shadow: 4px 4px 0px #dd0061;
+
+  /* Position 3 (Fourth Card) */
+  --deck-pos-3-scale: 0.85;
+  --deck-pos-3-translate-y: 48px;
+  --deck-pos-3-translate-z: -120px;
+  --deck-pos-3-opacity: 0.5;
+  --deck-pos-3-z-index: 10;
+  --deck-pos-3-shadow: none;
+}
+
+.perspective-deck {
+  perspective: 1000px;
+  transform-style: preserve-3d;
+}
+
