@@ -277,18 +277,20 @@ export const MemeCard: React.FC<MemeCardProps> = ({
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <div className="flex flex-col min-w-0 pr-2 max-w-[65%]">
-              <span className="text-white font-bold text-[13px] truncate leading-tight drop-shadow-[1px_1px_0px_#000]">
-                {meme.title || 'UNTITLED MASTERPIECE'}
-              </span>
-              {meme.source === 'Reddit' && (
+            {meme.source === 'Reddit' ? (
+              <div className="flex flex-col min-w-0 pr-2 max-w-[65%]">
+                <span className="text-white font-bold text-[13px] truncate leading-tight drop-shadow-[1px_1px_0px_#000]">
+                  {meme.title || 'UNTITLED MASTERPIECE'}
+                </span>
                 <span className="text-[#988ca1] text-[10px] truncate leading-tight mt-0.5">
                   @{meme.author || 'reddit'} • r/{meme.subreddit}
                 </span>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div />
+            )}
 
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
               {meme.source === 'Reddit' && (
                 <span className="text-[9px] border border-outline/40 px-1 py-0.5 text-secondary">
                   REDDIT

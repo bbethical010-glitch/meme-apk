@@ -11,17 +11,17 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
 
-import androidx.activity.EdgeToEdge;
 import androidx.core.content.FileProvider;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -36,26 +36,33 @@ import java.util.Locale;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Enable edge-to-edge for Android 15+ (SDK 35) backward compatibility
-        EdgeToEdge.enable(this);
-
         super.onCreate(savedInstanceState);
 
-        // Handle display cutout mode for notch/hole-punch displays
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            WindowManager.LayoutParams params = getWindow().getAttributes();
-            params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
-            getWindow().setAttributes(params);
+        int darkBg = Color.parseColor("#131313");
+        Window window = getWindow();
+        window.setBackgroundDrawable(new ColorDrawable(darkBg));
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+            window.setStatusBarColor(darkBg);
+            window.setNavigationBarColor(darkBg);
         }
 
-        // Apply window insets to the root view for proper edge-to-edge padding
+        View decorView = window.getDecorView();
+        decorView.setBackgroundColor(darkBg);
+
+        WindowInsetsControllerCompat controller = new WindowInsetsControllerCompat(window, decorView);
+        controller.setAppearanceLightStatusBars(false);
+        controller.setAppearanceLightNavigationBars(false);
+
         View rootView = findViewById(android.R.id.content);
         if (rootView != null) {
-            ViewCompat.setOnApplyWindowInsetsListener(rootView, (v, windowInsets) -> {
-                Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-                v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
-                return WindowInsetsCompat.CONSUMED;
-            });
+            rootView.setBackgroundColor(darkBg);
+            rootView.setPadding(0, 0, 0, 0);
+        }
+
+        if (bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().setBackgroundColor(darkBg);
         }
 
         bridge.getWebView().addJavascriptInterface(new MemeCapsuleDownloads(this), "MemeCapsuleAndroid");

@@ -851,8 +851,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
   };
 
   const shareMeme = async (item: Meme) => {
+    const displayTitle = item.source === 'Reddit' ? item.title : 'Meme Capsule Drop';
     if (window.MemeCapsuleAndroid) {
-      window.MemeCapsuleAndroid.shareImage(item.url, safeFileName(item.title), item.title);
+      window.MemeCapsuleAndroid.shareImage(item.url, safeFileName(displayTitle), displayTitle);
       if (item.id) {
         trackEvent(item.id, 'share');
       }
@@ -861,8 +862,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
 
     try {
       await Share.share({
-        title: item.title,
-        text: `Check out this Meme Capsule drop: "${item.title}"`,
+        title: displayTitle,
+        text: `Check out this Meme Capsule drop: "${displayTitle}"`,
         url: item.url,
         dialogTitle: 'SHARE MEME CAPSULE DROP',
       });
@@ -871,7 +872,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
     } catch (error) {
       if (navigator.share) {
         try {
-          await navigator.share({ title: item.title, text: item.title, url: item.url });
+          await navigator.share({ title: displayTitle, text: displayTitle, url: item.url });
           if (item.id) {
             trackEvent(item.id, 'share');
           }
@@ -1551,7 +1552,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
                       <div className="h-[140px] bg-background border-[2px] border-outline overflow-hidden flex items-center justify-center relative">
                         <img src={fav.url} alt={fav.title} className="w-full h-full object-cover" />
                       </div>
-                      <span className="font-label-md text-[15px] uppercase truncate font-bold text-on-surface block" title={fav.title}>{fav.title}</span>
+                      <span className="font-label-md text-[15px] uppercase truncate font-bold text-on-surface block" title={fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}>{fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}</span>
                       <div className="flex justify-between items-center gap-xs mt-auto border-t border-outline/30 pt-xs">
                         <span className="font-label-md text-[11px] text-outline uppercase truncate max-w-[100px]">@{fav.author}</span>
                         <div className="flex gap-1.5">
@@ -1626,7 +1627,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
                   </aside>
                   {selectedBoard && <div className={`bg-surface-container border-[4px] ${boardColor} p-sm`}>
                     <div className="flex justify-between items-start gap-sm border-b-[3px] border-outline pb-sm mb-sm"><div><span className="font-label-md text-[12px] text-secondary-container uppercase">PINNED ENERGY</span><h3 className="font-headline-xl text-[34px] text-on-surface uppercase leading-none">{selectedBoard.title}</h3></div><button onClick={() => removeMoodBoard(selectedBoard.id)} title="Delete board" className="bg-error-container text-on-error-container border-[2px] border-background p-1.5 shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"><Trash2 size={17} /></button></div>
-                    {pinnedMemes.length === 0 ? <div className="border-[3px] border-dashed border-outline p-lg text-center"><p className="font-label-xl text-[20px] text-outline uppercase">NO PINS YET. HIT THE GRID ICON ON A MEME.</p><button onClick={() => setActiveTab('home')} className="mt-sm bg-secondary-container text-on-secondary-container border-[2px] border-background px-3 py-1.5 font-label-xl uppercase">FIND MEMES</button></div> : <div className="columns-2 sm:columns-3 gap-sm">{pinnedMemes.map((item) => <article key={item.url} className="break-inside-avoid mb-sm bg-surface-container-low border-[3px] border-outline shadow-[3px_3px_0px_0px_#000] p-1.5 relative group"><img src={item.url} alt={item.title} className="w-full max-h-[240px] object-cover border-[2px] border-background" /><p className="font-label-md text-[11px] text-on-surface uppercase leading-tight p-1 truncate">{item.title}</p><button onClick={() => toggleMemeOnBoard(selectedBoard.id, item)} className="absolute right-2 top-2 bg-tertiary-container text-on-tertiary-container border-[2px] border-background p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"><X size={14} /></button></article>)}</div>}
+                    {pinnedMemes.length === 0 ? <div className="border-[3px] border-dashed border-outline p-lg text-center"><p className="font-label-xl text-[20px] text-outline uppercase">NO PINS YET. HIT THE GRID ICON ON A MEME.</p><button onClick={() => setActiveTab('home')} className="mt-sm bg-secondary-container text-on-secondary-container border-[2px] border-background px-3 py-1.5 font-label-xl uppercase">FIND MEMES</button></div> : <div className="columns-2 sm:columns-3 gap-sm">{pinnedMemes.map((item) => <article key={item.url} className="break-inside-avoid mb-sm bg-surface-container-low border-[3px] border-outline shadow-[3px_3px_0px_0px_#000] p-1.5 relative group"><img src={item.url} alt={item.title} className="w-full max-h-[240px] object-cover border-[2px] border-background" /><p className="font-label-md text-[11px] text-on-surface uppercase leading-tight p-1 truncate">{item.source === 'Reddit' ? item.title : 'MEME CAPSULE DROP'}</p><button onClick={() => toggleMemeOnBoard(selectedBoard.id, item)} className="absolute right-2 top-2 bg-tertiary-container text-on-tertiary-container border-[2px] border-background p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"><X size={14} /></button></article>)}</div>}
                   </div>}
                 </div>
               )}

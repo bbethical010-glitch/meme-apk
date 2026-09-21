@@ -117,7 +117,7 @@ body {
   padding: 0;
   overflow: hidden;
   color: var(--color-on-background);
-  min-height: max(884px, 100dvh);
+  min-height: 100dvh;
 }
 
 .text-stroke-yellow {

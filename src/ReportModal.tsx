@@ -99,7 +99,7 @@ export default function ReportModal({
             <span className="font-label-md text-[10px] text-outline uppercase tracking-wider">FLAGGED ITEM</span>
             <div className="flex items-center justify-between gap-2">
               <span className="font-headline-lg-mobile text-[16px] text-on-surface uppercase truncate font-bold">
-                {meme.title}
+                {meme.source === 'Reddit' ? meme.title : 'MEME CAPSULE DROP'}
               </span>
               <span className="font-label-md text-[10px] text-tertiary uppercase border border-tertiary/40 px-1 py-0.5 shrink-0">
                 {meme.source || 'MEME'}
