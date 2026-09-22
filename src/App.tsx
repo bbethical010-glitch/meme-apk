@@ -61,6 +61,8 @@ type BackendMemePayload = {
   url?: string;
   image?: string;
   category?: string;
+  status?: string;
+  is_active?: number | boolean;
   rarity?: string;
   media_type?: string;
   uploaded_at?: string;
@@ -252,44 +254,48 @@ export default function App() {
     return meme ? [meme, ...memeQueue] : memeQueue;
   }, [isMultiDropView, multiDropMemes, multiDropIndex, meme, memeQueue]);
 
-  // Fill the pipeline queue when it drops below target
+  // Fill the pipeline queue when it drops below target (batched to prevent network congestion)
   const fillPipeline = useCallback(async (currentQueueSize: number, startOffset: number) => {
     if (isFillingQueue.current) return;
     const needed = PIPELINE_TARGET_SIZE - currentQueueSize;
     if (needed <= 0) return;
 
     isFillingQueue.current = true;
-    const fetchPromises: Promise<Meme | null>[] = [];
+    try {
+      // Controlled batching in groups of 2 to prevent mobile connection saturation
+      const batchSize = 2;
+      for (let offset = 0; offset < needed; offset += batchSize) {
+        const count = Math.min(batchSize, needed - offset);
+        const batchPromises: Promise<Meme | null>[] = [];
+        for (let i = 0; i < count; i++) {
+          batchPromises.push(
+            fetchValidMeme(startOffset + offset + i + 1).catch((err) => {
+              console.warn(`Pipeline fetch #${offset + i} failed:`, err);
+              return null;
+            })
+          );
+        }
 
-    for (let i = 0; i < needed; i++) {
-      fetchPromises.push(
-        fetchValidMeme(startOffset + i + 1).catch((err) => {
-          console.warn(`Pipeline fetch #${i} failed:`, err);
-          return null;
-        })
-      );
-    }
+        const results = await Promise.allSettled(batchPromises);
+        const newMemes: Meme[] = [];
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) {
+            newMemes.push(result.value);
+          }
+        }
 
-    // Settle all — add non-null results to queue
-    const results = await Promise.allSettled(fetchPromises);
-    const newMemes: Meme[] = [];
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value) {
-        newMemes.push(result.value);
+        if (newMemes.length > 0) {
+          setMemeQueue(prev => {
+            const existingUrls = new Set(prev.map(m => m.url));
+            const unique = newMemes.filter(m => !existingUrls.has(m.url));
+            return [...prev, ...unique].slice(0, PIPELINE_TARGET_SIZE);
+          });
+          setQueueFetchCounter(prev => prev + newMemes.length);
+        }
       }
+    } finally {
+      isFillingQueue.current = false;
     }
-
-    if (newMemes.length > 0) {
-      setMemeQueue(prev => {
-        // Avoid duplicates by URL
-        const existingUrls = new Set(prev.map(m => m.url));
-        const unique = newMemes.filter(m => !existingUrls.has(m.url));
-        return [...prev, ...unique].slice(0, PIPELINE_TARGET_SIZE);
-      });
-      setQueueFetchCounter(prev => prev + newMemes.length);
-    }
-
-    isFillingQueue.current = false;
   }, []);
 
   // Auto-fill pipeline when queue is low and we're in viewing state
@@ -471,28 +477,48 @@ export default function App() {
     }
   };
 
-const preloadImage = (url: string, timeoutMs = 7000): Promise<boolean> => {
+const preloadImage = (url: string, timeoutMs = 3500): Promise<boolean> => {
   return new Promise((resolve) => {
     if (!url) return resolve(false);
     const img = new Image();
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      img.onload = null;
+      img.onerror = null;
+    };
+
     img.onload = () => {
-      if (timer) clearTimeout(timer);
-      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        resolve(true);
-      } else {
-        resolve(false);
-      }
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
     };
+
     img.onerror = () => {
-      if (timer) clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolve(false);
     };
+
     timer = setTimeout(() => {
-      img.src = '';
-      resolve(false);
+      if (settled) return;
+      settled = true;
+      cleanup();
+      // On slower mobile connections, if URL is well-formed, allow it through
+      // so the card displays immediately rather than choking on retry loops
+      resolve(isValidImageUrl(url));
     }, timeoutMs);
+
     img.src = url;
+    if (img.complete && img.naturalWidth > 0) {
+      settled = true;
+      cleanup();
+      resolve(true);
+    }
   });
 };
 
@@ -524,7 +550,20 @@ const fetchMixedMeme = async (nextViewed: number): Promise<Meme> => {
   try {
     const json = await fetchBackendMemePayload();
     if (!json?.meme) throw new Error('Unexpected Meme Capsule payload');
-    const backendMeme = normalizeMeme(json.meme);
+    const memeData: BackendMemePayload = json.meme;
+
+    // Strict validation: Must be active (is_active = 1 or true), status != archived, category != archived
+    if (memeData.is_active === 0 || memeData.is_active === false) {
+      throw new Error('Backend meme is not active');
+    }
+    if (memeData.status && memeData.status.toLowerCase() === 'archived') {
+      throw new Error('Backend meme status is archived');
+    }
+    if (memeData.category && memeData.category.toLowerCase() === 'archived') {
+      throw new Error('Backend meme category is archived');
+    }
+
+    const backendMeme = normalizeMeme(memeData);
     if (!backendMeme.url || !isValidImageUrl(backendMeme.url)) {
       throw new Error('Backend meme did not include a valid image URL');
     }
@@ -540,7 +579,7 @@ const fetchMixedMeme = async (nextViewed: number): Promise<Meme> => {
   }
 };
 
-const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme> => {
+const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme> => {
   let reportedList: string[] = [];
   try {
     reportedList = JSON.parse(localStorage.getItem('reported_memes') || '[]');
@@ -550,17 +589,29 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
     try {
       const candidate = await fetchMixedMeme(nextViewed + attempt);
       if (candidate?.url && !reportedList.includes(candidate.url)) {
-        const isLoaded = await preloadImage(candidate.url);
+        const isLoaded = await preloadImage(candidate.url, 3500);
         if (isLoaded) {
           return candidate;
         }
-        console.warn(`[Attempt ${attempt + 1}/${maxRetries}] Preload failed for ${candidate.url}. Retrying another source...`);
+        console.warn(`[Attempt ${attempt + 1}/${maxRetries}] Preload failed for ${candidate.url}. Retrying next...`);
       }
     } catch (err) {
       console.warn(`[Attempt ${attempt + 1}/${maxRetries}] Fetch candidate failed:`, err);
     }
   }
-  throw new Error('Could not retrieve a working image after multiple attempts.');
+
+  // Graceful fallback to verified curated vault meme
+  return {
+    id: `vault-drop-${nextViewed}`,
+    url: 'https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C3VwSYoOSW__2.jpg',
+    title: 'CURATED VAULT DROP',
+    author: 'Meme Capsule Vault',
+    subreddit: 'D1 Vault',
+    rarity: 'Common',
+    mediaType: 'image',
+    source: 'Meme Capsule',
+    likes: 42,
+  };
 };
 
   const showToast = (text: string, type: 'primary' | 'secondary' | 'tertiary' | 'success' = 'primary') => {
@@ -807,33 +858,17 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
 
     let progress = 0;
     const interval = setInterval(() => {
-      progress = Math.min(progress + Math.floor(Math.random() * 15) + 5, 100);
+      progress = Math.min(progress + Math.floor(Math.random() * 25) + 15, 100);
       setLoadProgress(progress);
       const logIdx = Math.floor((progress / 100) * HACKER_LOGS.length);
       setCurrentLog(HACKER_LOGS[Math.min(logIdx, HACKER_LOGS.length - 1)]);
       if (progress >= 100) clearInterval(interval);
-    }, 150);
+    }, 80);
 
     try {
       const nextViewed = totalMemesViewed + 1;
-      // Fetch initial 4 cards in parallel to populate the 4 visible stack positions
-      const fetchPromises = [
-        fetchValidMeme(nextViewed),
-        fetchValidMeme(nextViewed + 1).catch((err) => {
-          console.warn('Initial stack fetch #1 failed:', err);
-          return null;
-        }),
-        fetchValidMeme(nextViewed + 2).catch((err) => {
-          console.warn('Initial stack fetch #2 failed:', err);
-          return null;
-        }),
-        fetchValidMeme(nextViewed + 3).catch((err) => {
-          console.warn('Initial stack fetch #3 failed:', err);
-          return null;
-        }),
-      ];
-
-      const [finalMeme, ...restResults] = await Promise.all(fetchPromises);
+      // Fetch Card 1 fast so user transitions instantly to viewing
+      const finalMeme = await fetchValidMeme(nextViewed);
 
       clearInterval(interval);
       setLoadProgress(100);
@@ -841,34 +876,44 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
       setTimeout(() => {
         setImageFailed(false);
         setMeme(finalMeme);
-        const initialQueue = restResults.filter((m): m is Meme => m !== null);
-        setMemeQueue(initialQueue);
         setScreen('viewing');
         setTotalMemesViewed(nextViewed);
-        setTotalMemesFetched(nextViewed + initialQueue.length);
+        setTotalMemesFetched(nextViewed);
         localStorage.setItem('total_memes_viewed', nextViewed.toString());
-        localStorage.setItem('total_memes_fetched', (nextViewed + initialQueue.length).toString());
-        
+        localStorage.setItem('total_memes_fetched', nextViewed.toString());
+
         // Add to history
         setMemeHistory(prev => [...prev.slice(-14), finalMeme]);
         setHistoryIndex(-1);
-        
+
         // Track the view event
         if (finalMeme.id) {
           trackEvent(finalMeme.id, 'view');
         }
-        
+
         void maybeShowInterstitial(nextViewed);
 
-        // Kick off pipeline fill in background after initial stack loads
-        fillPipeline(initialQueue.length, nextViewed + initialQueue.length);
-      }, 250);
+        // In background, populate the rest of the 4-card stack and top off the pipeline
+        (async () => {
+          const restResults = await Promise.all([
+            fetchValidMeme(nextViewed + 1).catch(() => null),
+            fetchValidMeme(nextViewed + 2).catch(() => null),
+            fetchValidMeme(nextViewed + 3).catch(() => null),
+          ]);
+          const initialQueue = restResults.filter((m): m is Meme => m !== null);
+          if (initialQueue.length > 0) {
+            setMemeQueue(initialQueue);
+            setTotalMemesFetched(nextViewed + initialQueue.length);
+            localStorage.setItem('total_memes_fetched', (nextViewed + initialQueue.length).toString());
+          }
+          fillPipeline(initialQueue.length, nextViewed + initialQueue.length);
+        })();
+      }, 150);
     } catch (error) {
       clearInterval(interval);
-      console.error('Fetch meme loop error, retrying silently...', error);
-      setTimeout(() => {
-        fetchMeme();
-      }, 1000);
+      console.error('Fetch meme error:', error);
+      setErrorMsg('COMEDY DECRYPTION TIMEOUT');
+      setScreen('error');
     }
   };
 
@@ -1263,8 +1308,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
       }, 250);
     } catch (error) {
       clearInterval(interval);
-      console.error('Triple drop failed, retrying...', error);
-      setTimeout(() => fetchTripleDrop(), 1000);
+      console.error('Triple drop failed:', error);
+      setErrorMsg('TRIPLE DROP LINK TIMEOUT');
+      setScreen('error');
     }
   };
 

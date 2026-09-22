@@ -59,14 +59,56 @@ export const MemeCard: React.FC<MemeCardProps> = ({
   onImagePointerDown,
   onImagePointerUp,
 }) => {
+  const imgRef = React.useRef<HTMLImageElement>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const [memeDimensions, setMemeDimensions] = useState<{ width: number; height: number } | null>(null);
   const isActive = position === 0;
+
+  const handleImageSuccess = React.useCallback((naturalWidth: number, naturalHeight: number) => {
+    setImageLoaded(true);
+    setImageError(false);
+    if (naturalWidth && naturalHeight) {
+      const dims = { width: naturalWidth, height: naturalHeight };
+      setMemeDimensions(dims);
+      if (isActive && onDimensionsLoaded) {
+        onDimensionsLoaded(dims);
+      }
+    }
+  }, [isActive, onDimensionsLoaded]);
 
   useEffect(() => {
     setMemeDimensions(null);
     setImageLoaded(false);
-  }, [meme.url]);
+    setImageError(false);
+
+    // Immediate cached image check: if already complete in browser/WebView cache
+    if (imgRef.current?.complete && imgRef.current?.naturalWidth > 0) {
+      handleImageSuccess(imgRef.current.naturalWidth, imgRef.current.naturalHeight);
+    }
+  }, [meme.url, handleImageSuccess]);
+
+  // When card transitions to active position (position 0), check if image already completed
+  useEffect(() => {
+    if (isActive && imgRef.current?.complete && imgRef.current?.naturalWidth > 0) {
+      handleImageSuccess(imgRef.current.naturalWidth, imgRef.current.naturalHeight);
+    }
+  }, [isActive, handleImageSuccess]);
+
+  // Safety timer: Never leave user stuck on DECRYPTING... for more than 2.5s if card is active
+  useEffect(() => {
+    if (isActive && !imageLoaded && !imageError) {
+      const timer = setTimeout(() => {
+        if (imgRef.current?.complete && imgRef.current?.naturalWidth > 0) {
+          handleImageSuccess(imgRef.current.naturalWidth, imgRef.current.naturalHeight);
+        } else {
+          // Dismiss shimmer so whatever bytes arrived or browser rendering can be seen
+          setImageLoaded(true);
+        }
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, imageLoaded, imageError, handleImageSuccess]);
 
   // Bind handlers only on the active front card
   const gestureBindings = isActive && bind ? bind() : {};
@@ -102,21 +144,20 @@ export const MemeCard: React.FC<MemeCardProps> = ({
       >
         {meme.url ? (
           <img
+            ref={imgRef}
             src={meme.url}
             alt={meme.title || 'Meme'}
             onLoad={(e) => {
-              setImageLoaded(true);
               const target = e.currentTarget;
-              if (target.naturalWidth && target.naturalHeight) {
-                const dims = { width: target.naturalWidth, height: target.naturalHeight };
-                setMemeDimensions(dims);
-                if (isActive && onDimensionsLoaded) {
-                  onDimensionsLoaded(dims);
-                }
-              }
+              handleImageSuccess(target.naturalWidth, target.naturalHeight);
+            }}
+            onError={() => {
+              console.warn('Image load error for meme:', meme.url);
+              setImageError(true);
+              setImageLoaded(true);
             }}
             className="w-full h-full object-contain pointer-events-none select-none"
-            loading={isActive ? 'eager' : 'lazy'}
+            loading={isActive || position === 1 ? 'eager' : 'lazy'}
             draggable={false}
           />
         ) : (
@@ -126,10 +167,22 @@ export const MemeCard: React.FC<MemeCardProps> = ({
         )}
 
         {/* Loading Shimmer Overlay (Active Card Only) */}
-        {isActive && (isLoading || !imageLoaded) && (
+        {isActive && !imageError && (isLoading || !imageLoaded) && (
           <div className="absolute inset-0 z-30 loading-shimmer opacity-90 flex flex-col items-center justify-center">
             <span className="font-label-xl text-[14px] text-white tracking-widest uppercase bg-black/60 px-3 py-1 border border-primary-container">
               DECRYPTING...
+            </span>
+          </div>
+        )}
+
+        {/* Broken / Corrupted Image State */}
+        {imageError && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-surface-container-highest p-4 text-center">
+            <span className="font-label-xl text-[13px] text-tertiary uppercase tracking-wider mb-2">
+              SIGNAL CORRUPTED
+            </span>
+            <span className="font-body-md text-[11px] text-outline uppercase">
+              SWIPE TO SKIP TO NEXT MEME
             </span>
           </div>
         )}
