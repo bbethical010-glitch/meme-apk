@@ -2,5 +2,12 @@
   "appId": "com.meme.capsule",
   "appName": "Meme Capsule",
   "webDir": "dist",
-  "backgroundColor": "#131313"
+  "backgroundColor": "#131313",
+  "plugins": {
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#131313",
+      "overlaysWebView": false
+    }
+  }
 }

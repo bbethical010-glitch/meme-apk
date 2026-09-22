@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { animated } from '@react-spring/web';
 import {
-  Bookmark,
   Download,
   Flag,
-  Heart,
-  LayoutGrid,
   Share2,
-  Smile,
 } from 'lucide-react';
 import type { Meme } from '../types';
 
@@ -161,108 +157,94 @@ export const MemeCard: React.FC<MemeCardProps> = ({
           </div>
         )}
 
-        {/* Floating Action Rail (Active Card Only) */}
+        {/* Download + Share Overlay (Top-Right, Active Card Only) */}
         {isActive && (
           <div
-            className="absolute right-2 bottom-12 z-30 flex flex-col items-center gap-1.5 pointer-events-auto"
+            className="absolute top-[10px] right-[10px] z-20 flex items-center gap-2 pointer-events-auto"
             onClick={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            {/* Like */}
-            {onToggleLike && (
+            {onDownload && (
               <button
                 type="button"
-                onClick={onToggleLike}
-                title="Like meme"
-                className={`floating-action-btn ${isLiked ? 'bg-tertiary-container/95' : ''}`}
-                style={{ width: '34px', height: '34px' }}
+                onClick={onDownload}
+                title="Download"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(13, 13, 13, 0.75)',
+                  border: '1.5px solid #f4c300',
+                  borderRadius: '0px',
+                  color: '#f4c300',
+                  backdropFilter: 'blur(4px)',
+                  WebkitBackdropFilter: 'blur(4px)',
+                  cursor: 'pointer',
+                }}
               >
-                <Heart
-                  size={16}
-                  strokeWidth={2.5}
-                  className={isLiked ? 'text-on-tertiary-container' : 'text-white'}
-                  fill={isLiked ? 'currentColor' : 'none'}
-                />
+                <Download size={20} strokeWidth={2.5} />
               </button>
             )}
-
-            {/* Quick React */}
-            {onOpenReactionPicker && (
-              <button
-                type="button"
-                onClick={onOpenReactionPicker}
-                title="React"
-                className={`floating-action-btn ${reactionEmoji ? 'bg-secondary-container/95' : ''}`}
-                style={{ width: '34px', height: '34px' }}
-              >
-                {reactionEmoji ? (
-                  <span className="text-[16px] leading-none">{reactionEmoji}</span>
-                ) : (
-                  <Smile size={16} strokeWidth={2.5} className="text-white" />
-                )}
-              </button>
-            )}
-
-            {/* Share */}
             {onShare && (
               <button
                 type="button"
                 onClick={onShare}
                 title="Share"
-                className="floating-action-btn"
-                style={{ width: '34px', height: '34px' }}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(13, 13, 13, 0.75)',
+                  border: '1.5px solid #9b30ff',
+                  borderRadius: '0px',
+                  color: '#9b30ff',
+                  backdropFilter: 'blur(4px)',
+                  WebkitBackdropFilter: 'blur(4px)',
+                  cursor: 'pointer',
+                }}
               >
-                <Share2 size={16} strokeWidth={2.5} className="text-white" />
-              </button>
-            )}
-
-            {/* Download */}
-            {onDownload && (
-              <button
-                type="button"
-                onClick={onDownload}
-                title="Save image"
-                className="floating-action-btn"
-                style={{ width: '34px', height: '34px' }}
-              >
-                <Download size={16} strokeWidth={2.5} className="text-white" />
-              </button>
-            )}
-
-            {/* Vault */}
-            {onToggleFavorite && (
-              <button
-                type="button"
-                onClick={onToggleFavorite}
-                title="Add to Vault"
-                className={`floating-action-btn ${isFavorited ? 'bg-secondary-container/95' : ''}`}
-                style={{ width: '34px', height: '34px' }}
-              >
-                <Bookmark
-                  size={16}
-                  strokeWidth={2.5}
-                  className={isFavorited ? 'text-on-secondary-container' : 'text-white'}
-                  fill={isFavorited ? 'currentColor' : 'none'}
-                />
-              </button>
-            )}
-
-            {/* Pin to Board */}
-            {onOpenBoardPicker && (
-              <button
-                type="button"
-                onClick={onOpenBoardPicker}
-                title="Pin to Mood Board"
-                className={`floating-action-btn ${isPinnedToBoard ? 'bg-primary-container/95' : ''}`}
-                style={{ width: '34px', height: '34px' }}
-              >
-                <LayoutGrid size={15} strokeWidth={2.5} className="text-white" />
+                <Share2 size={20} strokeWidth={2.5} />
               </button>
             )}
           </div>
         )}
 
-        {/* Bottom Label Strip (Always visible on active card) */}
+        {/* Report Overlay (Bottom-Right, Active Card Only) — icon only */}
+        {isActive && onOpenReport && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onOpenReport(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            title="Report meme"
+            style={{
+              position: 'absolute',
+              bottom: '10px',
+              right: '10px',
+              zIndex: 20,
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(13, 13, 13, 0.6)',
+              border: '1px solid #988ca1',
+              borderRadius: '0px',
+              color: '#988ca1',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              cursor: 'pointer',
+            }}
+            className="pointer-events-auto"
+          >
+            <Flag size={16} />
+          </button>
+        )}
+
+        {/* Bottom Label Strip (Reddit Attribution — Active Card Only) */}
         {isActive && (
           <div
             className="absolute bottom-0 w-full z-20 flex items-center justify-between px-[16px] py-[10px] pointer-events-auto"
@@ -278,7 +260,7 @@ export const MemeCard: React.FC<MemeCardProps> = ({
             onPointerDown={(e) => e.stopPropagation()}
           >
             {meme.source === 'Reddit' ? (
-              <div className="flex flex-col min-w-0 pr-2 max-w-[65%]">
+              <div className="flex flex-col min-w-0 pr-2 max-w-[75%]">
                 <span className="text-white font-bold text-[13px] truncate leading-tight drop-shadow-[1px_1px_0px_#000]">
                   {meme.title || 'UNTITLED MASTERPIECE'}
                 </span>
@@ -295,17 +277,6 @@ export const MemeCard: React.FC<MemeCardProps> = ({
                 <span className="text-[9px] border border-outline/40 px-1 py-0.5 text-secondary">
                   REDDIT
                 </span>
-              )}
-              {onOpenReport && (
-                <button
-                  type="button"
-                  onClick={onOpenReport}
-                  className="flex items-center gap-0.5 text-error text-[9px] border border-error/50 px-1 py-0.5 bg-error-container/30 hover:bg-error-container/60 active:scale-95 transition-all"
-                  title="Report meme"
-                >
-                  <Flag size={9} />
-                  <span>REPORT</span>
-                </button>
               )}
             </div>
           </div>

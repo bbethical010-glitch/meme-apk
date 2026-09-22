@@ -16,6 +16,7 @@ import {
   Layers,
   LayoutGrid,
   Lock,
+  MapPin,
   Plus,
   Share2,
   Smile,
@@ -219,6 +220,12 @@ export default function App() {
   const swipeContainerRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<MemeStackRef>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const ctaLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isLikePressing, setIsLikePressing] = useState(false);
+  const likeScaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pinnedMemes, setPinnedMemes] = useState<Meme[]>([]);
+  const [unpinTargetMeme, setUnpinTargetMeme] = useState<Meme | null>(null);
+  const unpinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleImagePointerDown = useCallback(() => {
     longPressTimerRef.current = setTimeout(() => {
@@ -358,6 +365,15 @@ export default function App() {
       }
     }
 
+    const savedPinboard = localStorage.getItem('meme_pinboard');
+    if (savedPinboard) {
+      try {
+        setPinnedMemes(JSON.parse(savedPinboard));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     const savedCount = localStorage.getItem('total_memes_viewed');
     if (savedCount) setTotalMemesViewed(parseInt(savedCount, 10));
 
@@ -385,6 +401,17 @@ export default function App() {
 
     return () => clearInterval(jokeTimer);
   }, []);
+
+  useEffect(() => {
+    try {
+      const pinned = JSON.parse(
+        localStorage.getItem('meme_pinboard') ?? '[]'
+      ) as Meme[];
+      setPinnedMemes(pinned);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [activeTab]);
 
   const maybeShowInterstitial = async (nextViewed: number) => {
     if (isPro || !Capacitor.isNativePlatform() || !adMobReady || nextViewed % INTERSTITIAL_FREQUENCY !== 0) return;
@@ -1035,6 +1062,39 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
     }
   };
 
+  const handlePin = (m: Meme) => {
+    // Read existing pinned memes
+    const existing = JSON.parse(
+      localStorage.getItem('meme_pinboard') ?? '[]'
+    ) as Meme[];
+
+    // Avoid duplicates by checking URL
+    const alreadyPinned = existing.some((item) => item.url === m.url);
+    if (alreadyPinned) {
+      // Show toast: "Already pinned"
+      showToast('Already in moodboard', 'tertiary');
+      return;
+    }
+
+    // Add to pinboard
+    const updated = [{ ...m, savedAt: Date.now() }, ...existing];
+    localStorage.setItem('meme_pinboard', JSON.stringify(updated));
+    setPinnedMemes(updated);
+
+    // Visual feedback
+    showToast('Pinned to moodboard ✓', 'success');
+  };
+
+  const handleUnpin = (memeUrl: string) => {
+    const existing = JSON.parse(
+      localStorage.getItem('meme_pinboard') ?? '[]'
+    ) as Meme[];
+    const updated = existing.filter((item) => item.url !== memeUrl);
+    localStorage.setItem('meme_pinboard', JSON.stringify(updated));
+    setPinnedMemes(updated);
+    showToast('Removed from moodboard', 'tertiary');
+  };
+
   const downloadMeme = async (item: Meme) => {
     const fileName = safeFileName(item.title);
 
@@ -1217,7 +1277,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
   };
 
   return (
-    <div className="dark min-h-screen flex flex-col font-body-md overflow-x-hidden selection:bg-primary selection:text-on-primary bg-background text-on-background">
+    <div className="app-container dark min-h-screen flex flex-col font-body-md overflow-x-hidden selection:bg-primary selection:text-on-primary bg-background text-on-background">
       {toastText && (
         <div className={`fixed top-24 left-1/2 -translate-x-1/2 z-50 px-sm py-2 border-[3px] border-outline shadow-[4px_4px_0px_0px_#000] font-label-md text-xl uppercase ${
           toastType === 'success' ? 'bg-secondary-container text-on-secondary-container' :
@@ -1251,6 +1311,54 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
         onSubmitReport={handleSubmitReport}
         isSubmitting={isSubmittingReport}
       />
+
+      {/* Unpin Confirmation Modal */}
+      {unpinTargetMeme && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => setUnpinTargetMeme(null)}
+        >
+          <div
+            className="bg-surface-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-5 max-w-sm w-full text-center flex flex-col items-center gap-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-20 h-20 border-[2px] border-outline overflow-hidden bg-background">
+              <img
+                src={unpinTargetMeme.url}
+                alt={unpinTargetMeme.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div>
+              <h3 className="font-headline-xl text-[26px] uppercase text-on-surface leading-tight">
+                UNPIN MEME?
+              </h3>
+              <p className="font-label-md text-outline uppercase text-[12px] mt-1">
+                Remove this meme from your moodboard?
+              </p>
+            </div>
+            <div className="flex gap-3 w-full mt-1">
+              <button
+                type="button"
+                onClick={() => setUnpinTargetMeme(null)}
+                className="flex-1 bg-surface-container-high text-on-surface border-[2px] border-background py-2 font-label-xl uppercase text-[14px] active:scale-95 cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleUnpin(unpinTargetMeme.url);
+                  setUnpinTargetMeme(null);
+                }}
+                className="flex-1 bg-error-container text-on-error-container border-[2px] border-background py-2 font-label-xl uppercase text-[14px] shadow-[2px_2px_0px_0px_#000] active:scale-95 cursor-pointer"
+              >
+                UNPIN
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <header className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)]">
         <div className="flex items-center justify-between w-full max-w-[1200px] mx-auto">
@@ -1471,6 +1579,129 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
                   </div>
                 </div>
 
+                {/* Three Compact CTA Buttons Below Canvas */}
+                {meme && (
+                  <div className="w-full max-w-[380px] flex items-center justify-center gap-3 mt-4 px-3">
+                    {/* Like + React (single tap = like, long press = reaction picker) */}
+                    <button
+                      type="button"
+                      onClick={() => { if (meme) toggleLike(meme); }}
+                      onContextMenu={(e) => { e.preventDefault(); setShowReactionPicker(!showReactionPicker); setShowBoardPicker(false); }}
+                      onPointerDown={() => {
+                        likeScaleTimerRef.current = setTimeout(() => {
+                          setIsLikePressing(true);
+                        }, 200);
+                        ctaLongPressTimerRef.current = setTimeout(() => {
+                          setIsLikePressing(false);
+                          setShowReactionPicker(!showReactionPicker);
+                          setShowBoardPicker(false);
+                        }, 400);
+                      }}
+                      onPointerUp={() => {
+                        if (likeScaleTimerRef.current) { clearTimeout(likeScaleTimerRef.current); likeScaleTimerRef.current = null; }
+                        if (ctaLongPressTimerRef.current) { clearTimeout(ctaLongPressTimerRef.current); ctaLongPressTimerRef.current = null; }
+                        setIsLikePressing(false);
+                      }}
+                      onPointerLeave={() => {
+                        if (likeScaleTimerRef.current) { clearTimeout(likeScaleTimerRef.current); likeScaleTimerRef.current = null; }
+                        if (ctaLongPressTimerRef.current) { clearTimeout(ctaLongPressTimerRef.current); ctaLongPressTimerRef.current = null; }
+                        setIsLikePressing(false);
+                      }}
+                      style={{
+                        flex: 1,
+                        height: '52px',
+                        border: '2px solid #dd0061',
+                        borderRadius: '0px',
+                        background: '#1c1b1b',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        boxShadow: '3px 3px 0px #dd0061',
+                        cursor: 'pointer',
+                        color: '#dd0061',
+                        transform: isLikePressing ? 'scale(0.9)' : undefined,
+                        transition: 'transform 0.15s ease',
+                      }}
+                      className="active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+                    >
+                      <Heart
+                        size={24}
+                        strokeWidth={2.5}
+                        fill={likedMemes.includes(meme.url) ? '#dd0061' : 'none'}
+                        color="#dd0061"
+                      />
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', color: '#dd0061', lineHeight: 1 }}>
+                        LIKE
+                      </span>
+                    </button>
+
+                    {/* Vault */}
+                    <button
+                      type="button"
+                      onClick={() => { if (meme) toggleFavorite(meme); }}
+                      style={{
+                        flex: 1,
+                        height: '52px',
+                        border: '2px solid #9b30ff',
+                        borderRadius: '0px',
+                        background: '#1c1b1b',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        boxShadow: '3px 3px 0px #9b30ff',
+                        cursor: 'pointer',
+                        color: '#9b30ff',
+                      }}
+                      className="active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
+                    >
+                      <Bookmark
+                        size={24}
+                        strokeWidth={2.5}
+                        fill={favorites.some((f) => f.url === meme.url) ? '#9b30ff' : 'none'}
+                        color="#9b30ff"
+                      />
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', color: '#9b30ff', lineHeight: 1 }}>
+                        VAULT
+                      </span>
+                    </button>
+
+                    {/* Pin */}
+                    <button
+                      type="button"
+                      onClick={() => { if (meme) handlePin(meme); }}
+                      style={{
+                        flex: 1,
+                        height: '52px',
+                        border: '2px solid #f4c300',
+                        borderRadius: '0px',
+                        background: '#1c1b1b',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                        boxShadow: '3px 3px 0px #f4c300',
+                        cursor: 'pointer',
+                        color: '#f4c300',
+                      }}
+                      className="active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
+                    >
+                      <MapPin
+                        size={24}
+                        strokeWidth={2.5}
+                        fill={pinnedMemes.some((p) => p.url === meme.url) ? '#f4c300' : 'none'}
+                        color="#f4c300"
+                      />
+                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', color: '#f4c300', lineHeight: 1 }}>
+                        PIN
+                      </span>
+                    </button>
+                  </div>
+                )}
                   {/* Multi-Drop Gallery Navigation (if triple drop active) */}
                   {isMultiDropView && multiDropMemes.length > 1 && (
                     <div className="w-full max-w-[380px] bg-surface-container-low border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-primary-container)] p-2 flex items-center justify-between mt-2">
@@ -1559,18 +1790,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
                           <button onClick={() => downloadMeme(fav)} title="Download to gallery" className="bg-primary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><Download size={16} className="text-on-primary" /></button>
                           <button onClick={() => shareMeme(fav)} className="bg-secondary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><Share2 size={16} className="text-[#000]" /></button>
                           <button onClick={() => {
-                            if (moodBoards.length === 0) {
-                              setActiveTab('boards');
-                              showToast('CREATE A BOARD FIRST!', 'tertiary');
-                            } else if (moodBoards.length === 1) {
-                              toggleMemeOnBoard(moodBoards[0].id, fav);
-                            } else if (selectedBoardId) {
-                              toggleMemeOnBoard(selectedBoardId, fav);
-                            } else {
-                              setActiveTab('boards');
-                              showToast('SELECT A BOARD FIRST!', 'tertiary');
-                            }
-                          }} title={selectedBoardId ? `Pin to ${moodBoards.find(b => b.id === selectedBoardId)?.title || 'board'}` : 'Pin to mood board'} className="bg-tertiary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><LayoutGrid size={16} className="text-on-tertiary" /></button>
+                            handlePin(fav);
+                          }} title="Pin to mood board" className="bg-tertiary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><LayoutGrid size={16} className="text-on-tertiary" /></button>
                           <button onClick={() => {
                             const updated = favorites.filter((f) => f.url !== fav.url);
                             setFavorites(updated);
@@ -1587,53 +1808,115 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 10): Promise<Meme
           </section>
         )}
 
-        {activeTab === 'boards' && (() => {
-          const selectedBoard = moodBoards.find((board) => board.id === selectedBoardId) || null;
-          const pinnedMemes = selectedBoard ? selectedBoard.memeUrls.map((url) => favorites.find((fav) => fav.url === url)).filter((m): m is Meme => Boolean(m)) : [];
-          const boardColor = selectedBoard?.color === 'secondary' ? 'border-secondary-container shadow-[6px_6px_0px_0px_var(--color-tertiary)]' : selectedBoard?.color === 'tertiary' ? 'border-tertiary shadow-[6px_6px_0px_0px_var(--color-primary-container)]' : 'border-primary shadow-[6px_6px_0px_0px_var(--color-secondary-container)]';
-          return (
-            <section className="w-full max-w-[900px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">
-              <div className="flex items-end justify-between gap-sm border-b-[3px] border-outline pb-sm">
-                <div>
-                  <span className="font-label-md text-[13px] text-secondary-container uppercase">YOUR PERSONAL ARCHIVE</span>
-                  <h2 className="font-headline-xl text-[42px] text-primary tracking-tighter uppercase leading-none skew-x-[-3deg]">MOOD BOARDS</h2>
-                </div>
-                <button onClick={() => setIsBoardComposerOpen(true)} className="bg-secondary-container text-on-secondary-container border-[3px] border-background px-3 py-2 font-label-xl text-[16px] uppercase shadow-[3px_3px_0px_0px_var(--color-primary-container)] active:translate-x-1 active:translate-y-1 active:shadow-none flex items-center gap-1"><Plus size={18} /> NEW</button>
+        {activeTab === 'boards' && (
+          <section className="w-full max-w-[900px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">
+            <div className="flex items-end justify-between gap-sm border-b-[3px] border-outline pb-sm">
+              <div>
+                <span className="font-label-md text-[13px] text-secondary-container uppercase">YOUR PERSONAL ARCHIVE</span>
+                <h2 className="font-headline-xl text-[42px] text-primary tracking-tighter uppercase leading-none skew-x-[-3deg]">MOOD BOARD</h2>
               </div>
+              <span className="font-label-xl text-[14px] text-outline uppercase">
+                {pinnedMemes.length} {pinnedMemes.length === 1 ? 'PIN' : 'PINS'}
+              </span>
+            </div>
 
-              {isBoardComposerOpen && (
-                <form onSubmit={(e) => { e.preventDefault(); createMoodBoard(); }} className="bg-tertiary-container border-[3px] border-secondary-container shadow-[5px_5px_0px_0px_var(--color-primary-container)] p-sm flex flex-col sm:flex-row gap-sm">
-                  <input autoFocus value={boardTitle} onChange={(e) => setBoardTitle(e.target.value)} placeholder="NAME YOUR VIBE..." maxLength={28} className="flex-1 bg-surface-container-low border-[3px] border-background px-sm py-2 font-label-xl uppercase text-on-surface focus:outline-none focus:border-secondary-container" />
-                  <div className="flex gap-xs"><button type="submit" className="bg-secondary-container text-on-secondary-container border-[3px] border-background px-3 font-label-xl uppercase">BUILD IT</button><button type="button" onClick={() => setIsBoardComposerOpen(false)} className="bg-surface-container-high border-[3px] border-background px-3 text-on-surface"><X size={20} /></button></div>
-                </form>
-              )}
-
-              {moodBoards.length === 0 ? (
-                <div className="bg-surface-container border-[4px] border-dashed border-primary-container shadow-[6px_6px_0px_0px_var(--color-secondary-container)] py-xl px-md text-center flex flex-col items-center gap-sm">
-                  <LayoutGrid size={58} className="text-primary" />
-                  <h3 className="font-headline-xl text-[32px] uppercase text-on-surface leading-none">MAKE THE ALGORITHM JEALOUS.</h3>
-                  <p className="font-label-md text-outline uppercase max-w-[380px]">Collect the memes that define a mood, a phase, or a very specific 3 AM thought.</p>
-                  <button onClick={() => setIsBoardComposerOpen(true)} className="bg-primary text-on-primary border-[3px] border-background px-5 py-2 font-label-xl uppercase shadow-[3px_3px_0px_0px_var(--color-tertiary)] active:translate-x-1 active:translate-y-1 active:shadow-none">CREATE FIRST BOARD</button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-md items-start">
-                  <aside className="flex lg:flex-col gap-xs overflow-x-auto lg:overflow-visible pb-1">
-                    {moodBoards.map((board) => (
-                      <button key={board.id} onClick={() => setSelectedBoardId(board.id)} className={`min-w-[180px] text-left border-[3px] p-sm transition-all ${selectedBoardId === board.id ? 'bg-primary-container border-secondary-container text-on-primary-container shadow-[4px_4px_0px_0px_var(--color-secondary-container)] -translate-y-0.5' : 'bg-surface-container border-outline text-on-surface hover:border-primary'}`}>
-                        <span className="font-label-md text-[11px] opacity-70 uppercase">{board.memeUrls.length} PINS</span>
-                        <span className="block font-headline-xl text-[24px] uppercase leading-none truncate">{board.title}</span>
+            {pinnedMemes.length === 0 ? (
+              <div className="bg-surface-container border-[4px] border-dashed border-primary-container shadow-[6px_6px_0px_0px_var(--color-secondary-container)] py-xl px-md text-center flex flex-col items-center gap-sm">
+                <LayoutGrid size={58} className="text-primary" />
+                <h3 className="font-headline-xl text-[32px] uppercase text-on-surface leading-none">NO PINS YET.</h3>
+                <p className="font-label-md text-outline uppercase max-w-[380px]">
+                  Collect the memes that define a mood, a phase, or a very specific 3 AM thought. Tap the PIN button on any meme to save it here.
+                </p>
+                <button
+                  onClick={() => setActiveTab('home')}
+                  className="bg-primary text-on-primary border-[3px] border-background px-5 py-2 font-label-xl uppercase shadow-[3px_3px_0px_0px_var(--color-tertiary)] active:translate-x-1 active:translate-y-1 active:shadow-none cursor-pointer"
+                >
+                  FIND MEMES
+                </button>
+              </div>
+            ) : (
+              <div className="columns-2 sm:columns-3 gap-sm">
+                {pinnedMemes.map((item) => (
+                  <article
+                    key={item.url}
+                    className="break-inside-avoid mb-sm bg-surface-container-low border-[3px] border-outline shadow-[3px_3px_0px_0px_#000] p-1.5 relative group select-none cursor-pointer transition-transform active:scale-[0.98]"
+                    title="Long press to unpin"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setUnpinTargetMeme(item);
+                    }}
+                    onPointerDown={() => {
+                      unpinTimerRef.current = setTimeout(() => {
+                        setUnpinTargetMeme(item);
+                      }, 400);
+                    }}
+                    onPointerUp={() => {
+                      if (unpinTimerRef.current) {
+                        clearTimeout(unpinTimerRef.current);
+                        unpinTimerRef.current = null;
+                      }
+                    }}
+                    onPointerLeave={() => {
+                      if (unpinTimerRef.current) {
+                        clearTimeout(unpinTimerRef.current);
+                        unpinTimerRef.current = null;
+                      }
+                    }}
+                    onPointerCancel={() => {
+                      if (unpinTimerRef.current) {
+                        clearTimeout(unpinTimerRef.current);
+                        unpinTimerRef.current = null;
+                      }
+                    }}
+                  >
+                    <div className="relative overflow-hidden">
+                      <img
+                        src={item.url}
+                        alt={item.title}
+                        className="w-full max-h-[260px] object-cover border-[2px] border-background pointer-events-none"
+                        loading="lazy"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUnpinTargetMeme(item);
+                        }}
+                        title="Unpin meme"
+                        className="absolute right-2 top-2 bg-tertiary-container text-on-tertiary-container border-[2px] border-background p-1 opacity-90 hover:opacity-100 active:scale-90 transition-all shadow-[1px_1px_0px_0px_#000] cursor-pointer"
+                      >
+                        <X size={14} />
                       </button>
-                    ))}
-                  </aside>
-                  {selectedBoard && <div className={`bg-surface-container border-[4px] ${boardColor} p-sm`}>
-                    <div className="flex justify-between items-start gap-sm border-b-[3px] border-outline pb-sm mb-sm"><div><span className="font-label-md text-[12px] text-secondary-container uppercase">PINNED ENERGY</span><h3 className="font-headline-xl text-[34px] text-on-surface uppercase leading-none">{selectedBoard.title}</h3></div><button onClick={() => removeMoodBoard(selectedBoard.id)} title="Delete board" className="bg-error-container text-on-error-container border-[2px] border-background p-1.5 shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"><Trash2 size={17} /></button></div>
-                    {pinnedMemes.length === 0 ? <div className="border-[3px] border-dashed border-outline p-lg text-center"><p className="font-label-xl text-[20px] text-outline uppercase">NO PINS YET. HIT THE GRID ICON ON A MEME.</p><button onClick={() => setActiveTab('home')} className="mt-sm bg-secondary-container text-on-secondary-container border-[2px] border-background px-3 py-1.5 font-label-xl uppercase">FIND MEMES</button></div> : <div className="columns-2 sm:columns-3 gap-sm">{pinnedMemes.map((item) => <article key={item.url} className="break-inside-avoid mb-sm bg-surface-container-low border-[3px] border-outline shadow-[3px_3px_0px_0px_#000] p-1.5 relative group"><img src={item.url} alt={item.title} className="w-full max-h-[240px] object-cover border-[2px] border-background" /><p className="font-label-md text-[11px] text-on-surface uppercase leading-tight p-1 truncate">{item.source === 'Reddit' ? item.title : 'MEME CAPSULE DROP'}</p><button onClick={() => toggleMemeOnBoard(selectedBoard.id, item)} className="absolute right-2 top-2 bg-tertiary-container text-on-tertiary-container border-[2px] border-background p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"><X size={14} /></button></article>)}</div>}
-                  </div>}
-                </div>
-              )}
-            </section>
-          );
-        })()}
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <p className="font-label-md text-[11px] text-on-surface uppercase leading-tight truncate flex-1 pr-1" title={item.source === 'Reddit' ? item.title : 'MEME CAPSULE DROP'}>
+                        {item.source === 'Reddit' ? item.title : 'MEME CAPSULE DROP'}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); downloadMeme(item); }}
+                          title="Download"
+                          className="text-outline hover:text-primary transition-colors p-0.5 cursor-pointer"
+                        >
+                          <Download size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); shareMeme(item); }}
+                          title="Share"
+                          className="text-outline hover:text-secondary transition-colors p-0.5 cursor-pointer"
+                        >
+                          <Share2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-[68px] px-sm pb-safe bg-surface-container-highest border-t-[3px] border-outline md:max-w-[500px] md:left-1/2 md:-translate-x-1/2 md:border-x-[3px] md:bottom-md md:rounded-lg shadow-[0px_-4px_16px_0px_rgba(0,0,0,0.5)]">

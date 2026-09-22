@@ -50,6 +50,7 @@ public class MainActivity extends BridgeActivity {
 
         View decorView = window.getDecorView();
         decorView.setBackgroundColor(darkBg);
+        decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
 
         WindowInsetsControllerCompat controller = new WindowInsetsControllerCompat(window, decorView);
         controller.setAppearanceLightStatusBars(false);

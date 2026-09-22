@@ -1,157 +1,363 @@
-# AI App Context: Meme Capsule
+# AI App Context & Engineering Master: Meme Capsule
 
-## App Summary
-
-**Meme Capsule** is a high-performance, mobile-first meme discovery application designed for the Android platform. It is packaged using **Capacitor 8** around a highly styled, modern **React 19 + TypeScript + Vite** frontend. 
-
-The app features a distinct **Neo-Brutalist Arcade / Cyberpunk** visual aesthetic, featuring thick borders, vibrant neon accent colors, offset shadows, custom animations, and retro-futuristic arcade loading flows. The app is currently set up for Google Play Console distribution in the **Internal Testing** phase.
+> **Target Audience:** AI Coding Agents (Claude, Cursor, Hermes, Grok, Copilot, Antigravity, Windsurf) & Collaborating Engineers.  
+> **Purpose:** This document is the single, canonical, up-to-date context source for **Meme Capsule**. It details the current project scope, product vision, complete feature inventory, architectural layout, recent progress/commits, client & server state schemas, native Android bridge contracts, design guidelines, and strict engineering guardrails.  
+> **Last Updated:** September 2026 (Reflecting commits `3e6ba5a` and `8cccb7b`).
 
 ---
 
-## Current Play Store & Distribution Status
+## 1. Executive Summary & Project Identity
 
-- **Distribution Stage:** Internal Testing (Pre-Production)
-- **Target Platform:** Android (API level 21+)
-- **Play Console App Name:** Meme Capsule
-- **Android Package ID:** `com.meme.capsule`
-- **Primary App Category:** Entertainment
-- **Monetization State:** Pre-production test-only AdMob interstitial ads (frequency controlled).
-- **Google Play Compliance:** Ready for internal testing; requires replacement of test ad IDs and content source declarations before production launch.
+### What is Meme Capsule?
+**Meme Capsule** (`com.meme.capsule`) is a high-octane, mobile-first entertainment application that delivers curated, unpredictable internet memes one at a time with a single tap or swipe. Built with **React 19, TypeScript, and Vite**, and wrapped natively for Android using **Capacitor 8**, it intentionally rejects algorithmic homogenization, infinite feeds, and doomscrolling in favor of a punchy, arcade-style capsule drop experience.
 
----
+### Core Product Philosophy
+- **"Pure memes. Zero algorithm. No doomscrolling."**
+- Social feeds (TikTok, Instagram, Reddit, X) trap users in infinite scroll loops filled with sponsored posts and recycled formats.
+- Meme Capsule delivers instant, punchy laughs: one tap -> arcade hacker decryption sequence -> instantaneous meme payload -> tactile interactions (swipes, double-taps, reactions, gallery saves, native sharing).
 
-## Core Features & Gameplay Loop
-
-### 1. Mixed Meme Discovery API Strategy
-The app fetches memes from two primary sources, utilizing an alternating strategy:
-- **Default/Primary Endpoint:** The custom Meme Capsule Serverless backend: `https://meme-capsule-eww.pages.dev/api/random-meme`.
-- **Alternating Reddit Feed:** Every 3rd fetch (where `totalMemesViewed % 3 === 0`) queries the Reddit Meme API: `https://meme-api.com/gimme`.
-- **NSFW/Spoiler Safety Filter:** When fetching from Reddit, the app automatically inspects the payload and drops any memes flagged as `nsfw` or `spoiler`, triggering an immediate fallback to the custom Meme Capsule API to guarantee a safe-for-work experience.
-
-### 2. Hacker Loading & Arcade Console
-Before a meme is presented, the user is wowed with an interactive loading screen:
-- **Hacker Logs:** Rotates through mock diagnostic text ("CHECKING REDDIT MEME RELAY...", "HARVESTING CLOUDFLARE D1 SHARDS...", etc.) synchronizing with progress percentages.
-- **Erratic Cyber Countdown:** An erratic retro-futuristic counter cycling random string tokens (`03.14`, `99.99`, `42.00`, `ERR`, `69.69`, etc.) to simulate decryption math.
-- **Loading Shimmer Bar:** A custom high-velocity CSS gradient shimmer reflecting the neo-brutalist theme.
-
-### 3. Double-Click Meme Reactions & Haptics
-- Double-clicking the main meme card triggers visual reactions overlaying the card (`DANK!`, `CRINGE!`, `SO REAL`, `GIGA DANK`, `EPIC!`).
-- Triggers a card-shaking CSS animation (`animate-shake`) mimicking physical haptic feedback.
-
-### 4. Dual-Path Image Downloading & Sharing
-To ensure optimal performance and standard capability across web browsers and native Android, the app implements a robust split sharing system:
-- **On Native Android:** Accesses a custom Java native bridge interface (`window.MemeCapsuleAndroid` injected via WebKit).
-  - **Download Method:** Calls `downloadImage` which opens a connection in a background thread, downloads the image, and utilizes **MediaStore (Android 10+)** via `ContentResolver` to save it cleanly inside `Pictures/Meme Capsule` without needing insecure write permissions. It falls back to legacy external storage paths on older APIs.
-  - **Share Method:** Calls `shareImage` which saves the image safely into the app cache directory and triggers a native Android `Intent.ACTION_SEND` chooser wrapped with secure `FileProvider` URI grants.
-- **On Web / Fallback:** 
-  - **Download:** Employs programmatic `Blob` object downloading.
-  - **Share:** Tries native `@capacitor/share` or Web Share API, falling back to writing the URL to the user's clipboard.
-
-### 5. "Meme Vault" (Favorites & Stats Dashboard)
-A complete personal vault section:
-- **Interactive Stats Panel:** Tracks user stats: Viewed Memes count, Fetched Memes count, and Liked Memes count.
-- **Search Filtering:** Quick search to instantly filter saved memes by title.
-- **Vault Operations:** Download, Share, or securely delete individual memes from the vault.
-
-### 6. Dev Joke Ticker
-- Features a dynamic developer humor subtitle ticker (`DEV_JOKES`) that cycles funny tech jokes every 12 seconds in the background.
-
-### 7. Google AdMob Integration
-- Fully integrated using `@capacitor-community/admob` with automatic testing initialization.
-- Shows an interstitial ad every **4th** meme viewed on native Android platforms, avoiding overwhelming the user.
+### Current Distribution & Release Status
+- **Target Platform:** Android (Native wrapper via Capacitor 8, API level 21+ to 35) + Progressive Web App (PWA).
+- **Package ID:** `com.meme.capsule`
+- **Play Store Stage:** Google Play Console **Internal Testing (Pre-Production)**.
+- **Production Domain:** `https://memecapsule.wtf/`
+- **Serverless API Base:** `https://meme-capsule-eww.pages.dev`
+- **Monetization Framework:** Google AdMob (Production Ad Unit IDs configured) + In-App Purchases (IAP) via `@capgo/native-purchases` (`remove_ads_forever`).
 
 ---
 
-## Technical Stack & Infrastructure
+## 2. Technical Stack & Infrastructure Architecture
 
-- **UI Library:** React 19 (Hooks: `useState`, `useEffect`)
-- **Language Layer:** TypeScript (with strict types for JSON payloads)
-- **Bundler & Server:** Vite + Tailwind CSS v4
-- **Mobile Container:** Capacitor 8
-- **Core Mobile Plugins:**
-  - `@capacitor/share` (Web sharing fallback)
-  - `@capacitor/core` (`CapacitorHttp` to resolve CORS/SSL issues on Android)
-  - `@capacitor-community/admob` (Monetization framework)
-- **Icons:** `lucide-react` (Neo-brutalist button outlines)
+```mermaid
+graph TD
+    subgraph Client [Mobile Client - Capacitor 8 + React 19]
+        UI[React 19 + TypeScript + Vite]
+        CSS[Tailwind CSS v4 + Cyber-Brutalist Theme]
+        Stack[MemeStack: React-Spring + Use-Gesture]
+        Storage[Local State / localStorage Cache]
+        AnalyticsQ[Silent Telemetry Queue]
+    end
+
+    subgraph Native [Android OS Native Layer]
+        Bridge[MainActivity.java: MemeCapsuleAndroid Bridge]
+        MediaStore[MediaStore API / Pictures/Meme Capsule]
+        ShareIntent[FileProvider & Intent.ACTION_SEND]
+        AdMobSDK[Capacitor AdMob Plugin]
+        IAPSDK[CapGo Native Purchases Plugin]
+    end
+
+    subgraph Backend [Cloudflare Serverless Infrastructure]
+        Pages[Cloudflare Pages / Workers API]
+        D1[(Cloudflare D1 SQLite Database)]
+        R2[(Cloudflare R2 Object Storage / Images)]
+        RedditAPI[Reddit Meme API: meme-api.com/gimme]
+    end
+
+    UI --> Bridge
+    UI --> Stack
+    UI --> AnalyticsQ
+    Bridge --> MediaStore
+    Bridge --> ShareIntent
+    UI --> AdMobSDK
+    UI --> IAPSDK
+
+    UI -->|Primary Endpoint| Pages
+    Pages --> D1
+    Pages --> R2
+    UI -->|Every 3rd Fetch| RedditAPI
+    AnalyticsQ -->|Batch Flush POST /api/events| Pages
+```
+
+### Core Technologies
+| Domain | Technology / Library | Version | Role / Implementation Details |
+| :--- | :--- | :--- | :--- |
+| **Frontend Framework** | React | `^19.0.1` | Concurrent mode, hooks, zero unnecessary re-renders |
+| **Language** | TypeScript | `~5.8.2` | Strict typings, strict null checks, fully typed payloads |
+| **Build Tooling** | Vite | `^6.2.3` | Lightning-fast HMR, optimized production tree-shaking |
+| **CSS Styling** | Tailwind CSS | `^4.1.14` | Native `@theme` engine, Neo-Brutalist color tokens & utilities |
+| **Gesture & Physics** | `@use-gesture/react` & `@react-spring/web` | `^10.3.1` / `^10.1.2` | Fluid 4-card 3D perspective deck, spring physics, drag threshold |
+| **Native Container** | Capacitor | `^8.3.4` | Native Android WebView packaging, cross-platform bridge |
+| **Native Java Bridge** | Custom `MainActivity.java` | Native | MediaStore background downloading, FileProvider sharing |
+| **Monetization** | `@capacitor-community/admob` | `^8.0.0` | Interstitial ads every 4 memes + rewarded bonus drops |
+| **In-App Purchases** | `@capgo/native-purchases` | `^8.6.5` | Google Play Billing `remove_ads_forever` |
+| **Iconography** | `lucide-react` | `^0.546.0` | Crisp geometric vector icons |
+| **Backend & Edge** | Cloudflare Pages / Workers | Serverless | Edge API endpoints (`/api/random-meme`, `/api/events`, `/api/report`) |
+| **Primary Database** | Cloudflare D1 | SQLite Edge | Meme metadata storage & high-volume telemetry events |
+| **Media Storage** | Cloudflare R2 | S3-Compatible | Direct CDN image asset hosting |
 
 ---
 
-## Styling System & Theme Tokens (`src/index.css`)
+## 3. Complete Feature Inventory & Implementation Status
 
-The app employs **Tailwind CSS v4** with a highly customized theme configuration (`@theme`) to establish a signature cyber-brutalist experience:
-
-### Theme Colors
-- `primary-container` (`#9b30ff`): Neon Purple
-- `secondary-container` (`#f4c300`): Arcade Gold/Yellow
-- `tertiary-container` (`#dd0061`): Hot Magenta Pink
-- `background` (`#131313`): Pitch Cyber Black
-- `surface-container-high` (`#2a2a2a`): Charcoal Grey
-- `outline` (`#988ca1`): Muted Slate
-
-### Fonts
-- **Headlines:** `Anton` (Ultra-heavy, blocky uppercase headers)
-- **Labels & Numbers:** `Oswald` (Clean, condensed mechanical text)
-- **Body Text:** `Chivo` (Highly readable modern sans-serif)
-
-### Custom Classes & Keyframes
-- **`.neo-shadow-pink`:** Solid offset text drop-shadow (`text-shadow: 4px 4px 0px var(--color-tertiary)`).
-- **`.glitch-text`:** Creates a retro yellow-pink 3D offset drop-shadow effect.
-- **`.loading-shimmer`:** A fast gradient sliding animation shifting across neon purple and hot pink.
-- **`@keyframes erratic`:** Cycles custom numbers and text content for the loader in CSS content properties.
-- **`.animate-shake`:** Quick CSS translation animation matching custom card reactions.
-
----
-
-## File Architecture
-
-- **[src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx):** Houses all state hooks, API request pipelines, storage serialization, page rendering, layout views, and AdMob events.
-- **[src/index.css](file:///Users/prathampandey/Desktop/zip/src/index.css):** Holds Google font imports, Tailwind v4 customizations, custom keyframe animations, and custom styling overrides.
-- **[android/app/src/main/java/com/meme/capsule/MainActivity.java](file:///Users/prathampandey/Desktop/zip/android/app/src/main/java/com/meme/capsule/MainActivity.java):** Native Java activity wrapper. Contains the nested `MemeCapsuleDownloads` class and all MediaStore background thread streaming / share Intent caching.
-- **[capacitor.config.json](file:///Users/prathampandey/Desktop/zip/capacitor.config.json):** Configuration mapping the bundle target identifier `com.meme.capsule` and output directory `dist`.
+| Feature | File / Component | Status | Behavior & Specifications |
+| :--- | :--- | :--- | :--- |
+| **Single-Tap Capsule Drop** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Tapping `HIT ME` triggers hacker loader decryption, then pops next meme from queue. |
+| **FIFO Prefetch Pipeline** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Maintains target buffer of 7 upcoming memes (`PIPELINE_TARGET_SIZE = 7`). Fetches in background and preloads images into browser cache so drops are zero-latency. |
+| **Alternating Feed Strategy** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Defaults to Cloudflare D1/R2 API (`/api/random-meme`). Every 3rd fetch (`totalMemesViewed % 3 === 0`) queries Reddit (`meme-api.com/gimme`). |
+| **NSFW / UGC Safety Filter** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Drops Reddit payloads with `nsfw: true` or `spoiler: true`, immediately falling back to curated internal backend. |
+| **4-Card 3D Spring Stack** | [src/components/MemeStack.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeStack.tsx) | `IMPLEMENTED` | Renders up to 4 stacked cards with staggered 3D perspective, depth offsets, scale down (`1.0 -> 0.95 -> 0.90 -> 0.85`), and neo-brutal drop shadows. |
+| **Swipe Gestures** | [src/components/MemeStack.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeStack.tsx) | `IMPLEMENTED` | **Swipe Right:** `keep` (fly out right); **Swipe Left:** `skip` (fly out left); **Swipe Up:** `save` (fly out top, saved to Vault). Rubber-band physics with release thresholds. |
+| **Double-Tap Reaction & Shake** | [src/components/MemeStack.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeStack.tsx) & [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx) | `IMPLEMENTED` | Double-tap detects 2 taps within 320ms, triggers card `animate-shake` haptic simulation and displays random neon text overlays (`DANK!`, `CRINGE!`, `SO REAL`, `GIGA DANK`, `EPIC!`). |
+| **Long-Press Gallery Save** | [src/components/MemeStack.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeStack.tsx) | `IMPLEMENTED` | Holding pointer for 600ms automatically triggers native gallery download via Java bridge. |
+| **Floating Action Rail** | [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx) | `IMPLEMENTED` | Active card features floating action rail on right edge: Like (`Heart`), Quick React (`Smile`), Share (`Share2`), Download (`Download`), Vault (`Bookmark`), Pin to Board (`LayoutGrid`). |
+| **Quick Emoji Picker** | [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx) & [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | 6 persistent reactions: `💀` (DEAD), `🔥` (FIRE), `😂` (LMAO), `🗿` (BRUH), `❤️` (LOVE), `👑` (KING). Animates floating emoji on select and pins reaction badge to card corner. |
+| **UGC Reporting Modal** | [src/ReportModal.tsx](file:///Users/prathampandey/Desktop/zip/src/ReportModal.tsx) | `IMPLEMENTED` | Google Play compliance requirement: Dedicated modal reporting offensive username, hate speech, NSFW, violence, or other violations. Submits to `${ANALYTICS_API_BASE}/api/report`. |
+| **Clean Bottom Strip (No Meme IDs)** | [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx) | `IMPLEMENTED` | Shows title and `@author • r/sub` for Reddit memes. Internal R2/DB IDs are strictly hidden for clean presentation. Features red `REPORT` button. |
+| **Meme Vault (Favorites)** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Searchable local collection of favorited memes with count stats. **Free tier limit:** 20 memes (`FREE_VAULT_LIMIT = 20`). **Pro tier:** Unlimited. |
+| **Mood Boards ("Pinned Energy")** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Multi-board organization with custom theme colors (`primary`, `secondary`, `tertiary`) and grid views. |
+| **Pro Upgrade Tier (IAP)** | [src/ProUpgradeModal.tsx](file:///Users/prathampandey/Desktop/zip/src/ProUpgradeModal.tsx) & [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | In-App Purchase via Google Play Billing (`remove_ads_forever`). Unlocks: Zero Ads, Triple Drop Mode, Unlimited Vault, Priority Drops. |
+| **AdMob Monetization** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Interstitial ad every 4th meme viewed on native Android (`INTERSTITIAL_FREQUENCY = 4`). Rewarded interstitial ads for bonus drops. Automatically bypassed if `isPro === true`. |
+| **Daily Streak Counter** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Tracks consecutive days opened using `streak_count` and `streak_last_date`. |
+| **Dev Joke Ticker** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Rotates witty developer jokes every 12 seconds in the subtitle ticker. |
+| **Onboarding Modal** | [src/OnboardingModal.tsx](file:///Users/prathampandey/Desktop/zip/src/OnboardingModal.tsx) | `IMPLEMENTED` | 3-slide visual onboarding walkthrough explaining drops, swiping, saving, and Pro features. |
+| **Silent Telemetry Pipeline** | [src/analytics/](file:///Users/prathampandey/Desktop/zip/src/analytics) | `IMPLEMENTED` | Batches events (`view`, `like`, `skip`, `keep`, `share`, `download`, `long_view`, `reaction`) in localStorage queue (up to 50 items) and flushes every 30s or on page unload to `POST /api/events`. |
+| **Admin Analytics Endpoints** | [functions/api/admin/analytics/](file:///Users/prathampandey/Desktop/zip/functions/api/admin/analytics) & root scripts | `IMPLEMENTED` | Edge functions for aggregating telemetry: `/overview` (ranking top memes by engagement, virality, retention) and `/recalculate`. |
 
 ---
 
-## Data Preservation & Local Storage
+## 4. Recent Progress, Commits & Build History
 
-The app maintains state purely client-side with no central backend user database. The following `localStorage` keys are managed by the React frontend:
-- `meme_favorites`: JSON array storing normalized `Meme` records favorited by the user.
-- `liked_memes`: String array of meme image URLs representing liked entries.
-- `total_memes_viewed`: Int tracking total memes displayed.
-- `total_memes_fetched`: Int tracking total attempts made to pull memes.
+### Commit `8cccb7b` (HEAD -> main)
+- **Commit Message:** `fix: remove white top and bottom bars, remove meme ID labels, solidify #131313 theme and update APKs`
+- **What Was Solved:**
+  1. **System Bars Immersion:** Removed white flash and white navigation/status bars across all Android versions. Enforced `#131313` background across Android `Window`, `statusBarColor`, `navigationBarColor`, `decorView`, `rootView`, and Capacitor `WebView`. Configured `WindowInsetsControllerCompat` to light icons on dark background.
+  2. **Theme Unification:** Updated `android/app/src/main/res/values/styles.xml` and `index.html` to guarantee instant `#131313` background rendering before WebKit loads.
+  3. **Removed Meme ID Labels:** Completely purged ugly internal database / R2 hash labels from the UI in [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx).
+  4. **Updated APK Outputs:** Rebuilt and synced all production and debug Android artifacts.
+
+### Commit `3e6ba5a`
+- **Commit Message:** `fix: UI cleanup — hide buttons post-load, remove R2 ID labels, dynamic canvas, remove fresh drop badge, fix white bars`
+- **What Was Solved:**
+  1. Cleaned up redundant button clusters after meme drops load.
+  2. Implemented dynamic aspect ratio canvas: card dimensions dynamically match the natural image aspect ratio (`aspectRatio: memeDimensions ? '${memeDimensions.width} / ${memeDimensions.height}' : '4/3'`) with maximum constraints.
+  3. Removed distracting "FRESH DROP" badge.
+
+### Build Outputs in [builds/](file:///Users/prathampandey/Desktop/zip/builds)
+- `builds/app-debug.apk` & `builds/meme-capsule-debug.apk` (Latest debug binaries, ~12 MB)
+- `builds/meme-capsule-screen-fix-debug.apk` (Bar fix build)
+- `builds/meme-capsule-ui-cleanup-debug.apk` (Cleaned UI build)
+- `builds/meme-capsule.aab` & `builds/app-release.aab` (Google Play production App Bundles, ~7.8 MB)
 
 ---
 
-## Critical Commands for Development
+## 5. File Structure & Component Mapping
 
-### 1. Environment Setup & Local Dev
+```text
+/Users/prathampandey/Desktop/zip/
+├── AI_APP_CONTEXT.md               <-- Canonical AI Agent Context (this document)
+├── APP KNOWLEDGE EXTRACTION...     <-- Knowledge extraction prompt specification
+├── app_info.md                     <-- Master product & architecture reference document
+├── index.html                      <-- Root HTML entry with viewport-fit=cover & #131313 background
+├── package.json                    <-- Dependencies (React 19, Vite 6, Tailwind 4, Capacitor 8)
+├── tsconfig.json                   <-- TypeScript strict configuration
+├── vite.config.ts                  <-- Vite bundler configuration
+├── capacitor.config.json           <-- Capacitor configuration (appId: com.meme.capsule)
+│
+├── src/
+│   ├── main.tsx                    <-- React root mount point
+│   ├── App.tsx                     <-- Core state, API fetching, FIFO pipeline, AdMob, tabs, modals
+│   ├── index.css                   <-- Tailwind v4 @theme tokens, Anton/Oswald/Chivo fonts, keyframes
+│   ├── types.ts                    <-- Core interfaces: Meme, MoodBoard, DismissDecision
+│   ├── OnboardingModal.tsx         <-- 3-slide visual onboarding guide
+│   ├── ProUpgradeModal.tsx         <-- In-App Purchase modal (remove ads, unlimited vault, triple drops)
+│   ├── ReportModal.tsx             <-- UGC policy compliance reporting modal (submits to /api/report)
+│   │
+│   ├── components/
+│   │   ├── MemeStack.tsx           <-- 4-card 3D perspective deck, React-Spring animations, gesture drag
+│   │   └── MemeCard.tsx            <-- Individual card, image loader, floating rail, dynamic aspect ratio
+│   │
+│   └── analytics/
+│       ├── index.ts                <-- Analytics module exports & ANALYTICS_API_BASE
+│       ├── analyticsTypes.ts       <-- EventType, MemeEvent, EventBatchPayload interfaces
+│       ├── deviceId.ts             <-- Persistent anonymous UUID device identifier generator
+│       ├── analyticsQueue.ts       <-- LocalStorage buffered event queue (up to 50 events)
+│       ├── analyticsFlush.ts       <-- Silent background HTTP batch flush mechanism
+│       └── useAnalytics.ts         <-- React hook tracking views, skips, likes, shares, downloads
+│
+├── android/
+│   └── app/src/main/
+│       ├── java/com/meme/capsule/
+│       │   └── MainActivity.java   <-- BridgeActivity with MemeCapsuleAndroid (MediaStore & Share)
+│       └── res/
+│           ├── values/styles.xml   <-- Android styles enforcing #131313 status/navigation bars
+│           └── drawable*/splash.png<-- Splash screen assets
+│
+├── functions/                      <-- Cloudflare Pages serverless functions
+│   └── api/
+│       ├── events.ts               <-- POST /api/events: Receives & batches client telemetry into D1
+│       └── admin/analytics/
+│           ├── overview.ts         <-- GET /api/admin/analytics/overview: Aggregated performance stats
+│           └── recalculate.ts      <-- POST /api/admin/analytics/recalculate: Recalculates scoring ranks
+│
+├── d1/
+│   └── migrations/
+│       └── 002_analytics.sql       <-- SQL schema: meme_events, meme_analytics, meme_daily_stats
+│
+└── builds/                         <-- Generated Android APK and AAB binaries
+```
+
+---
+
+## 6. Data Storage, Schemas & Client State
+
+### 1. Client `localStorage` Keys
+| Key | Type | Description |
+| :--- | :--- | :--- |
+| `meme_favorites` | `Meme[]` (JSON) | Saved vault memes. Limited to 20 for free tier; unlimited for Pro. |
+| `liked_memes` | `string[]` (JSON) | Array of meme image URLs marked as liked by the user. |
+| `meme_mood_boards` | `MoodBoard[]` (JSON) | User-created mood boards with custom color IDs (`primary`, `secondary`, `tertiary`). |
+| `meme_reactions` | `Record<string, string>` | Mapping of `memeUrl -> emoji` (e.g. `{"https://...": "💀"}`). |
+| `total_memes_viewed`| `number` | Total count of memes presented to user. Triggers AdMob every 4th view. |
+| `total_memes_fetched`| `number` | Cumulative fetch attempt counter. |
+| `streak_count` | `number` | Current consecutive day streak count. |
+| `streak_last_date` | `string` (`YYYY-MM-DD`)| Last recorded active calendar date for streak calculations. |
+| `is_pro` | `'true'` \| `null` | Flag indicating active Pro status (IAP unlocked). |
+| `meme_device_id` | `string` (UUID) | Anonymous hardware/installation identifier for telemetry. |
+| `meme_analytics_queue` | `MemeEvent[]` (JSON) | Buffered telemetry events waiting to be flushed to `/api/events`. |
+
+### 2. Cloudflare D1 Database Tables (`002_analytics.sql`)
+1. **`meme_events`:** Individual raw telemetry event logs.
+   - Columns: `id`, `meme_id`, `event_type` (`view`, `like`, `unlike`, `share`, `download`, `skip`, `keep`, `long_view`, `re_fetch`, `reaction`), `session_id`, `device_id`, `time_on_meme_ms`, `timestamp`.
+2. **`meme_analytics`:** Aggregated performance counters and algorithmic scoring.
+   - Columns: `meme_id`, `view_count`, `unique_viewer_count`, `like_count`, `share_count`, `download_count`, `skip_count`, `avg_time_on_meme_ms`, `engagement_score`, `virality_score`, `retention_score`, `trending_score`, `skip_rate`, `like_rate`, `share_rate`.
+3. **`meme_daily_stats`:** Daily aggregated rollup for time-series reporting.
+4. **`app_global_stats`:** Global platform totals and aggregation timestamps.
+
+---
+
+## 7. Native Android Bridge & System Integration
+
+### Bridge Class: `MainActivity.java`
+Registered as JavaScript interface: `window.MemeCapsuleAndroid`
+
+```java
+// Registered in onCreate()
+bridge.getWebView().addJavascriptInterface(new MemeCapsuleDownloads(this), "MemeCapsuleAndroid");
+```
+
+#### 1. `downloadImage(String url, String fileName)`
+- **Thread:** Spawns a dedicated background thread (`new Thread(runnable).start()`).
+- **Android 10+ (API 29+ / Q):** Utilizes `MediaStore.Images.Media.EXTERNAL_CONTENT_URI` via `ContentResolver`.
+  - Sets `RELATIVE_PATH = "Pictures/Meme Capsule"`.
+  - Sets `IS_PENDING = 1` while streaming the network response buffer (8KB chunks).
+  - Sets `IS_PENDING = 0` upon completion.
+  - Requires **zero dangerous runtime permissions** on modern Android.
+- **Legacy Fallback (Android <= 9 / P):** Saves directly to `Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)/Meme Capsule` and sends an `ACTION_MEDIA_SCANNER_SCAN_FILE` broadcast.
+- **Feedback:** Displays a native Android Toast (`Saved to Gallery` or `Download failed`).
+
+#### 2. `shareImage(String url, String fileName, String title)`
+- Downloads image into app-private cache directory: `context.getCacheDir()/shared_images/`.
+- Converts file into content URI using Android `FileProvider`:
+  - Authority: `com.meme.capsule.fileprovider`.
+- Launches standard Android system chooser:
+  ```java
+  Intent shareIntent = new Intent(Intent.ACTION_SEND);
+  shareIntent.setType(mimeType);
+  shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+  shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+  activity.startActivity(Intent.createChooser(shareIntent, "Share Meme Capsule image"));
+  ```
+
+#### 3. System Bar & UI Color Configuration
+To ensure a pure cyber-dark experience without visual glitches:
+- Window background: `#131313`.
+- Status bar & navigation bar: `#131313` with dark icons disabled (`controller.setAppearanceLightStatusBars(false)`).
+- Root content view & WebView background: explicitly set to `#131313` with zero padding.
+
+---
+
+## 8. Styling System & Neo-Brutalist Guidelines
+
+The entire app is styled using **Tailwind CSS v4** with custom tokens defined in [src/index.css](file:///Users/prathampandey/Desktop/zip/src/index.css).
+
+### 1. Palette Tokens
+- **Background:** `#131313` (Pitch Cyber Black)
+- **Primary Container:** `#9b30ff` (Neon Purple)
+- **Secondary Container:** `#f4c300` (Arcade Cyber Gold / Yellow)
+- **Tertiary Container:** `#dd0061` (Hot Magenta Pink)
+- **Surface Containers:** `#1c1b1b` (Low), `#201f1f` (Standard), `#2a2a2a` (High)
+- **Outline / Border:** `#988ca1` (Muted Slate)
+
+### 2. Typography
+- **Headlines / Big Labels:** `'Anton', sans-serif` (Ultra-heavy uppercase)
+- **Labels, Buttons, Numbers:** `'Oswald', sans-serif` (Condensed industrial mechanical sans)
+- **Body & Text:** `'Chivo', sans-serif` (Crisp modern geometric sans)
+
+### 3. Signature Neo-Brutalist UI Rules
+- **No Soft Rounded Corners:** Buttons and cards use hard right angles (`rounded-none` or `border-radius: 0px`). Pill shapes are reserved strictly for small status tags.
+- **Thick Solid Borders:** Standard borders are `border-[2px]` or `border-[3px]` in black (`#131313`) or neon accents.
+- **Offset Drop Shadows:** Sharp, unblurred drop shadows:
+  - `shadow-[4px_4px_0px_0px_#f4c300]` (Gold offset)
+  - `shadow-[4px_4px_0px_0px_#9b30ff]` (Purple offset)
+  - `shadow-[4px_4px_0px_0px_#dd0061]` (Pink offset)
+- **Tactile State Shifts:** Buttons depress on click using active transform (`active:translate-x-[2px] active:translate-y-[2px]`).
+
+---
+
+## 9. Critical Rules & Guardrails for AI Agents
+
+When editing, refactoring, or adding features to this codebase, any AI agent **MUST** follow these rules:
+
+> [!IMPORTANT]
+> **1. Preserve Native Bridge Compatibility:**
+> Never replace or remove calls to `window.MemeCapsuleAndroid.downloadImage` or `window.MemeCapsuleAndroid.shareImage`. Native Android functionality relies on this custom bridge to bypass WebView blob and sandbox restrictions.
+
+> [!WARNING]
+> **2. Never Display Internal Database/R2 IDs on the UI:**
+> Commits `3e6ba5a` and `8cccb7b` explicitly removed raw ID hashes from the card bottom strip. If `meme.source !== 'Reddit'`, render a clean UI without internal technical labels.
+
+> [!CAUTION]
+> **3. Maintain Immersion — Keep #131313 Everywhere:**
+> Do NOT set white, light, or transparent backgrounds on `body`, `html`, `#root`, modal backdrops, or Android configuration files. White system bars or background flashes are considered critical regressions.
+
+> [!NOTE]
+> **4. Handle CORS Nuances Between Web & Native:**
+> - On Android: `CapacitorHttp` is used to bypass CORS restrictions for fetching JSON and images.
+> - On Local Web (`npm run dev`): Standard browser CORS applies. Always maintain the fallback pattern established in `fetchJson()`.
+
+> [!IMPORTANT]
+> **5. Enforce Google Play Safety Compliance:**
+> Meme Capsule fetches third-party memes from Reddit. To comply with Google Play's User Generated Content (UGC) policy:
+> - NSFW/spoiler memes are automatically dropped.
+> - The `REPORT` button and `ReportModal.tsx` must remain functional and accessible on all displayed memes.
+
+> [!TIP]
+> **6. Respect the FIFO Prefetch Queue:**
+> When altering meme navigation or animations, do not bypass `memeQueue` or `fillPipeline`. Immediate, lag-free card drops depend on background prefetching and image preloading.
+
+---
+
+## 10. Development Commands & Operational Workflows
+
+### 1. Local Development
 ```bash
-# Install NPM packages
+# Install dependencies
 npm install
 
-# Run Vite dev server (accessible at http://localhost:3000)
+# Run local Vite dev server (host: 0.0.0.0, port: 3000)
 npm run dev
 ```
 
-### 2. Build & Packaging for Android
+### 2. Type Checking & Verification
 ```bash
-# Build React assets & sync to Capacitor Android project wrapper
-npm run build:android
-
-# Open native Android Studio context (if needed)
-npx cap open android
-```
-
-### 3. Verification & Lints
-```bash
-# Runs TypeScript compiler target checks
+# Verify TypeScript typings with zero emit
 npm run lint
 ```
 
----
+### 3. Android Build & Sync
+```bash
+# Build web bundle and sync native Android project
+npm run build:android
 
-## Guidelines for AI Assistants
+# Open native Android project in Android Studio
+npx cap open android
+```
 
-1. **Keep the Theme Consistent:** Any UI additions must adhere to the neo-brutalist theme guidelines. Never use default gradients, soft rounded buttons, or subtle shadows. Always use solid borders, bright neon backdrops, thick flat black borders, and heavy `Oswald` or `Anton` fonts.
-2. **Respect the Native Bridge:** Do not attempt to refactor native file operations in `App.tsx` without maintaining compatibility with `window.MemeCapsuleAndroid` in `MainActivity.java`.
-3. **CORS Prevention:** When fetching images or data from external servers, keep in mind that native apps bypass browser CORS checks, but the browser dev environment does not. Always use CapacitorHttp for native endpoints and include appropriate fallbacks.
-4. **Google Play Safety Compliance:** Remember that this app fetches random external web memes (from Reddit and other public repositories). Future features addressing content filters, privacy policies, blocklists, or report buttons should strictly follow Google Play policies regarding User Generated Content (UGC).
+### 4. Direct Gradle APK Compilation
+```bash
+# Navigate to android directory and compile debug APK
+cd android && ./gradlew assembleDebug
+
+# Compile release App Bundle (AAB) for Google Play
+cd android && ./gradlew bundleRelease
+```
