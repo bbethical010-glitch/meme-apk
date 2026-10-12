@@ -1,20 +1,24 @@
-# Agent Context & Instructions: Meme Capsule
+## Mandatory Cross-Codebase Knowledge Sync Workflow
 
-> **PRIMARY CONTEXT DOCUMENT:** All AI agents working on this project must consult **[AI_APP_CONTEXT.md](file:///Users/prathampandey/Desktop/zip/AI_APP_CONTEXT.md)** for full architecture, feature inventory, state schemas, native Android bridges, and operational guardrails.
+The canonical single source of truth across all 3 Meme Capsule repositories is `MEME_CAPSULE_KNOWLEDGE.md`, synchronized via `editorav010-dev/meme-capsule-sync`. All sync scripts are maintained inside `.knowledge/`.
 
-## Quick Reference for Agents
+### 1. BEFORE STARTING ANY TASK (MANDATORY STEP 0):
+Before writing any code or changing any configuration, detect your operating system and fetch the latest master knowledge:
+- **Windows**: `powershell -ExecutionPolicy Bypass -File .knowledge/fetch-knowledge.ps1`
+- **macOS / Linux**: `bash .knowledge/fetch-knowledge.sh`
+Read `MEME_CAPSULE_KNOWLEDGE.md` to understand recent architectural updates, schema migrations, and decisions made by teammates across other codebases.
 
-- **Project Name:** Meme Capsule (`com.meme.capsule`)
-- **Core Architecture:** React 19 + TypeScript + Vite + Tailwind CSS v4 + Capacitor 8 Android + Cloudflare D1/R2.
-- **Current Distribution Status:** Google Play Console Internal Testing (Pre-Production).
-- **Primary Design Aesthetic:** Neo-Brutalist Arcade / Cyberpunk (sharp corners, thick solid borders, offset drop shadows, `#131313` cyber dark theme).
+### 2. AFTER COMPLETING ANY TASK (MANDATORY FINAL STEP):
+After making ANY changes (features, bug fixes, UI/UX changes, Android APK updates, billing, or config):
+1. Update `MEME_CAPSULE_KNOWLEDGE.md` with your new changes, version updates, or notes.
+2. Push the updated knowledge file back to the shared repository:
+   - **Windows**: `powershell -ExecutionPolicy Bypass -File .knowledge/update-knowledge.ps1`
+   - **macOS / Linux**: `bash .knowledge/update-knowledge.sh`
+3. **If a CONFLICT (HTTP 409) occurs:** Run the fetch script fresh, manually merge your changes into the latest file, and run the update script again. Never force-push or bypass the fetch.
 
-## Critical Non-Negotiable Rules
-1. **Preserve Native Java Bridge:** Always maintain compatibility with `window.MemeCapsuleAndroid` in `MainActivity.java` for gallery downloads (MediaStore) and native sharing (`FileProvider`).
-2. **Never Display Database / R2 IDs on the UI:** Keep the card strip clean (internal hashes removed in recent commits `3e6ba5a` and `8cccb7b`).
-3. **Immersive #131313 Dark Theme:** Never reintroduce white top/bottom bars or flashes on Android or web.
-4. **FIFO Prefetch Pipeline:** Do not bypass the 7-meme background prefetch buffer (`memeQueue` / `fillPipeline`) in `src/App.tsx`.
-5. **Google Play Safety (UGC):** Preserve NSFW filtering and `ReportModal` submission (`/api/report`).
-6. **Lint Check Before Completing Work:** Always verify changes with `npm run lint`.
-
-*For detailed specifications, consult [AI_APP_CONTEXT.md](file:///Users/prathampandey/Desktop/zip/AI_APP_CONTEXT.md).*
+### 3. STRICT REPOSITORY BOUNDARY ENFORCEMENT:
+When editing `MEME_CAPSULE_KNOWLEDGE.md`, you are strictly restricted to the section corresponding to THIS codebase:
+- **If working in Android APK (`com.meme.capsule`)**: Only modify Android APK, Google Play billing, store architecture, AdMob, themes, and client bridge sections.
+- **If working in Companion Web (`memecapsule.wtf`)**: Only modify promotional landing, web marketing, and client web sections.
+- **If working in Backend / Curation Engine (`Meme-Capsule`)**: Only modify Cloudflare Pages, D1 tables, R2 storage, `/curate`, `/admin`, and AI Judge sections.
+**NEVER** touch, wipe, replace, or summarize another codebase's context. Always preserve external sections verbatim!

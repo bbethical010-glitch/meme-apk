@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+.knowledge/.env*
+.knowledge/.capsule_token
+.knowledge/*.local
+test-results/
+playwright-report/
