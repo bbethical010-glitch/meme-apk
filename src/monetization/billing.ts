@@ -54,14 +54,39 @@ export function queryOwnedPurchases(): Promise<Transaction[]> {
   });
 }
 
-export function queryProducts(): Promise<Product[]> {
-  return withBilling(async () => {
-    const { products } = await NativePurchases.getProducts({
-      productIdentifiers: PRODUCT_IDS,
-      productType: PURCHASE_TYPE.INAPP,
+import { CATALOG } from './catalog';
+
+export const FALLBACK_PRODUCTS: Product[] = CATALOG.map((item) => ({
+  identifier: item.id,
+  description: item.shortDescription,
+  title: item.name,
+  price: item.basePriceINR,
+  priceString: `₹${item.basePriceINR}`,
+  currencyCode: 'INR',
+  currencySymbol: '₹',
+  isFamilyShareable: false,
+  subscriptionGroupIdentifier: '',
+  subscriptionPeriod: null as any,
+  introductoryPrice: null,
+  discounts: [],
+} as Product));
+
+export async function queryProducts(): Promise<Product[]> {
+  try {
+    const live = await withBilling(async () => {
+      const { products } = await NativePurchases.getProducts({
+        productIdentifiers: PRODUCT_IDS,
+        productType: PURCHASE_TYPE.INAPP,
+      });
+      return products;
     });
-    return products;
-  });
+    if (live && live.length > 0) {
+      return live;
+    }
+  } catch (err) {
+    console.warn('[Billing] Query live products failed, using reference catalog prices:', err);
+  }
+  return FALLBACK_PRODUCTS;
 }
 
 export function buyProduct(product: Product): Promise<Transaction> {

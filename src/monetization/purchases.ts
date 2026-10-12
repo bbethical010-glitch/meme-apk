@@ -5,6 +5,9 @@ import {
   invalidateEntitlementCache,
   ownsProduct,
   getEntitlementsSnapshot,
+  grantProductDirectly,
+  resetAllEntitlements,
+  grantAllProductsDirectly,
 } from './entitlements';
 import { monetizationToast, notifyMonetizationChanged } from './events';
 import type { ProductId } from './products';
@@ -163,6 +166,42 @@ export async function purchase(productId: ProductId): Promise<PurchaseResult> {
 export async function purchaseProduct(productId: ProductId): Promise<boolean> {
   const result = await purchase(productId);
   return result === 'purchased' || result === 'already_owned';
+}
+
+/**
+ * Executes a simulated test purchase without Google Play Billing.
+ * Instantly grants entitlements and triggers celebration.
+ */
+export async function testPurchase(productId: ProductId): Promise<PurchaseResult> {
+  pendingProducts.delete(productId);
+  persistPending();
+  grantProductDirectly(productId);
+  monetizationToast('TEST UNLOCK SUCCESSFUL! ITEM READY');
+  notifyMonetizationChanged();
+  return 'purchased';
+}
+
+/**
+ * Resets all purchases back to 0.
+ * Reverts the app to the 100% free-tier state to test free limits.
+ */
+export function resetTestPurchases(): void {
+  pendingProducts.clear();
+  persistPending();
+  resetAllEntitlements();
+  monetizationToast('ALL UNLOCKS RESET (FREE TIER ACTIVE)');
+  notifyMonetizationChanged();
+}
+
+/**
+ * Unlocks all catalog products in test mode.
+ */
+export function grantAllTestPurchases(): void {
+  pendingProducts.clear();
+  persistPending();
+  grantAllProductsDirectly();
+  monetizationToast('ALL STORE ITEMS UNLOCKED (TEST MODE)');
+  notifyMonetizationChanged();
 }
 
 export async function restorePurchases(): Promise<void> {

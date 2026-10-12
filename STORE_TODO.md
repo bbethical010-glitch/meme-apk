@@ -100,5 +100,24 @@ Billing Plugin in use: `@capgo/native-purchases` v8.8.1 (supports Google Play Bi
 ## Step 8: Commit & Update Knowledge [DONE]
 - [x] Updated `STORE_TODO.md` with all completed items.
 - [x] Updated `.knowledge/MEME_CAPSULE_KNOWLEDGE.md` with store architecture and billing details.
-- [x] Ran `./update-knowledge.sh` to sync knowledge repo (new sha: 378d93d).
+- [x] Ran `./update-knowledge.sh` to sync knowledge repo (sha: 378d93d).
 - [x] All build verification and automated tests passing.
+
+---
+
+## Step 9: Clash of Clans Horizontal Redesign & QA Testing Mode [DONE]
+- [x] **Clash of Clans Horizontal Game Store**:
+  - Top category jump bar: `[★ FEATURED]`, `[BUNDLES]`, `[PASSES]`, `[THEMES]`, `[PACKS]`, `[ACCOUNT]` with active indicator tracking scroll position.
+  - Full horizontal scrolling arena with `snap-x snap-mandatory` and `snap-start` lateral swipe physics.
+  - Proportional game shop cards (`w-[275px]` to `w-[305px]`) where adjacent cards peek from the right edge to invite lateral browsing.
+  - Dedicated sections side-by-side: Featured (Capsule Max Hero), Value Bundles (4), Permanent Passes (3), Colour Themes (4), Drop Mode Packs (4), Play Store Account (1).
+- [x] **Free Feature & Sandbox Testing Without Payment Issues**:
+  - Reference prices fallback in `billing.ts`: Sideloaded APKs and offline environments display catalog prices (`₹149`, `₹79`, etc.) rather than broken/disabled buttons.
+  - Simulated test purchases via `testPurchase(productId)`: Instantly unlocks items with celebration without Google Play Console setup.
+  - Free tier test reset via `resetTestPurchases()`: One-tap button wipes all unlocks so testers can test the 100% free experience (Mood Boards 3-cap, default theme, classic FX, ads).
+  - Rewarded ad fallback in `App.tsx`: Graciously awards +1 Mood Board slot during testing even when native AdMob test video is unavailable.
+- [x] **Build Verification**:
+  - `npm run lint` (`tsc --noEmit`): 0 errors.
+  - `npm run test:monetization`: 15/15 tests passing.
+  - `npm run build:android`: Built web bundle in 1.4s.
+  - `./gradlew assembleDebug`: Built debug APK successfully (`builds/meme-capsule-debug.apk` and `builds/meme-capsule-latest.apk`).

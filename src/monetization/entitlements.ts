@@ -237,7 +237,45 @@ export function applyConfirmedPurchase(transaction: Transaction): boolean {
   return true;
 }
 
-// ================= HELPER FUNCTIONS =================
+// ================= HELPER & TESTING FUNCTIONS =================
+
+/**
+ * Grants a product directly into the local entitlements cache.
+ * Used for simulated purchases during offline/sideload testing.
+ */
+export function grantProductDirectly(productId: ProductId): Entitlements {
+  invalidateEntitlementCache();
+  const current = getEntitlementsSnapshot();
+  const nextProducts = [...new Set([...current.ownedProducts, productId])];
+  return publish(nextProducts);
+}
+
+/**
+ * Revokes a product directly from the local entitlements cache.
+ */
+export function revokeProductDirectly(productId: ProductId): Entitlements {
+  invalidateEntitlementCache();
+  const current = getEntitlementsSnapshot();
+  const nextProducts = current.ownedProducts.filter((id) => id !== productId);
+  return publish(nextProducts);
+}
+
+/**
+ * Resets all entitlements back to the fresh free-tier state.
+ * Crucial for testing free limits (Mood Boards cap, default themes, ads).
+ */
+export function resetAllEntitlements(): Entitlements {
+  invalidateEntitlementCache();
+  return publish([]);
+}
+
+/**
+ * Grants all catalog products for quick verification.
+ */
+export function grantAllProductsDirectly(): Entitlements {
+  invalidateEntitlementCache();
+  return publish(CATALOG.map((item) => item.id));
+}
 
 /**
  * Checks if the user owns a product ID or entitlement key.

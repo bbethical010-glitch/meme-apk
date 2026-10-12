@@ -11,6 +11,7 @@ interface StoreItemCardProps {
   isOwned: boolean;
   isPending: boolean;
   isBusy: boolean;
+  isTestMode?: boolean;
   onPurchase: (item: CatalogItem) => void;
 }
 
@@ -21,10 +22,12 @@ export default function StoreItemCard({
   isOwned,
   isPending,
   isBusy,
+  isTestMode = false,
   onPurchase,
 }: StoreItemCardProps) {
   const rarity = RARITY_CONFIG[item.rarity];
   const isAvailable = item.available;
+  const displayPrice = liveProduct?.priceString || `₹${item.basePriceINR}`;
 
   return (
     <article
@@ -33,12 +36,13 @@ export default function StoreItemCard({
         borderColor: isAvailable ? rarity.border : '#4d4355',
         boxShadow: isAvailable ? `4px 4px 0px 0px #000000` : 'none',
       }}
-      className={`relative p-4 bg-[#1c1b1b] border-[3px] flex flex-col justify-between transition-all ${
+      className={`relative p-4 bg-[#1c1b1b] border-[3px] w-[275px] shrink-0 snap-start flex flex-col justify-between h-full select-none transition-all ${
         !isAvailable ? 'opacity-65' : ''
       }`}
     >
       <div>
-        <div className="flex items-center justify-between gap-2 mb-2">
+        {/* Top Badges */}
+        <div className="flex items-center justify-between gap-1 mb-2">
           <span
             style={{
               borderColor: rarity.border,
@@ -64,16 +68,29 @@ export default function StoreItemCard({
           ) : null}
         </div>
 
-        <h3 className="font-headline-xl text-[24px] text-white tracking-wide uppercase leading-tight mb-1">
+        {/* Title */}
+        <h3 className="font-headline-xl text-[24px] text-white tracking-wide uppercase leading-tight mb-2">
           {item.name}
         </h3>
 
-        <p className="font-sans text-[13px] text-neutral-300 leading-snug mb-4">
+        {/* Short Description */}
+        <p className="font-sans text-[13px] text-neutral-300 leading-snug mb-3">
           {item.shortDescription}
         </p>
+
+        {/* Feature highlight chip */}
+        <div className="p-2 bg-black/40 border border-outline/30 mb-2">
+          <span className="font-label-md text-[11px] text-secondary-container uppercase tracking-wider block">
+            PERMANENT UNLOCK
+          </span>
+          <span className="font-sans text-[12px] text-neutral-400">
+            One-time purchase. Bound to your device & account.
+          </span>
+        </div>
       </div>
 
-      <div className="pt-2 border-t border-outline/30 flex items-center justify-between gap-2">
+      {/* Bottom Action Area */}
+      <div className="pt-3 border-t border-outline/30 mt-auto">
         {isOwned ? (
           <div className="w-full text-center py-2.5 font-label-xl text-[14px] bg-[#2a2a2a] text-[#f4c300] border-2 border-outline/40">
             OWNED
@@ -92,7 +109,7 @@ export default function StoreItemCard({
           </button>
         ) : loading ? (
           <div className="w-full py-3 bg-neutral-800 loading-shimmer border-2 border-neutral-700" />
-        ) : liveProduct ? (
+        ) : (
           <button
             type="button"
             disabled={isBusy}
@@ -100,17 +117,14 @@ export default function StoreItemCard({
             style={{
               backgroundColor: rarity.border,
             }}
-            className="w-full py-2.5 px-4 font-label-xl text-[15px] font-bold text-black uppercase border-[2px] border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:brightness-110 transition-all cursor-pointer disabled:opacity-50"
+            className="w-full py-2.5 px-3 font-label-xl text-[15px] font-bold text-black uppercase border-[2px] border-black shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:brightness-110 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
           >
-            {isBusy ? 'PLEASE WAIT…' : liveProduct.priceString}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            className="w-full py-2.5 font-label-xl text-[13px] uppercase bg-[#2a2a2a] text-neutral-400 border border-outline cursor-not-allowed"
-          >
-            STORE UNAVAILABLE
+            <span>{isBusy ? 'PLEASE WAIT…' : displayPrice}</span>
+            {isTestMode && !isBusy && (
+              <span className="text-[10px] bg-black text-white px-1 py-0.5 border border-black font-normal">
+                TEST
+              </span>
+            )}
           </button>
         )}
       </div>
