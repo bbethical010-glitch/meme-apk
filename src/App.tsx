@@ -34,6 +34,7 @@ import {
   Zap,
   MoreVertical,
   Star,
+  Calendar,
 } from 'lucide-react';
 import { Share } from '@capacitor/share';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
@@ -63,6 +64,7 @@ import ShareModal, { buildMemeShareMessage } from './ShareModal';
 import PrivacyPolicyModal from './components/PrivacyPolicyModal';
 import PrivacyConsentModal from './components/PrivacyConsentModal';
 import RatingModal from './components/RatingModal';
+import DateOfBirthModal from './components/DateOfBirthModal';
 import { MemeStack, MemeStackRef } from './components/MemeStack';
 import { memeDimensionCache, computeCanvasDimensions, CanvasDimensions } from './utils/dimensions';
 import type { Meme, MoodBoard, DismissDecision } from './types';
@@ -346,6 +348,8 @@ export default function App() {
   const rewardBusyRef = useRef(false);
   const [boardLimitReached, setBoardLimitReached] = useState(false);
   const [, refreshPerks] = useState(0);
+  const [isDobModalOpen, setIsDobModalOpen] = useState(false);
+  const [userDob, setUserDob] = useState<string | null>(() => localStorage.getItem('meme_capsule_user_dob'));
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
   const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
@@ -813,6 +817,25 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', checkAndFill);
   }, [screen, memeQueue.length, fillPipeline, totalMemesViewed, queueFetchCounter]);
 
+  const handleConfirmDob = useCallback((dob: string) => {
+    localStorage.setItem('meme_capsule_user_dob', dob);
+    localStorage.setItem('meme_capsule_dob_confirmed_at', new Date().toISOString());
+    setUserDob(dob);
+    setIsDobModalOpen(false);
+    showToast('AGE VERIFIED (18+) ✓ WELCOME!', 'success');
+
+    // After DOB is verified on initial launch, proceed to privacy policy if needed
+    const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
+    if (policyVersion !== '1.1') {
+      setIsConsentModalOpen(true);
+    } else {
+      const hasSeen = localStorage.getItem('has_seen_onboarding');
+      if (!hasSeen) {
+        setIsOnboardingOpen(true);
+      }
+    }
+  }, []);
+
   const handleAgreePolicy = useCallback(() => {
     localStorage.setItem('privacy_policy_agreed_version', '1.1');
     localStorage.setItem('privacy_policy_agreed_at', new Date().toISOString());
@@ -876,6 +899,7 @@ export default function App() {
 
     const timer = setTimeout(() => {
       if (
+        !isDobModalOpen &&
         !isConsentModalOpen &&
         !isPolicyModalOpen &&
         !isOnboardingOpen &&
@@ -896,6 +920,7 @@ export default function App() {
     totalMemesViewed,
     screen,
     activeTab,
+    isDobModalOpen,
     isConsentModalOpen,
     isPolicyModalOpen,
     isOnboardingOpen,
@@ -908,13 +933,19 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
-    if (policyVersion !== '1.1') {
-      setIsConsentModalOpen(true);
+    const savedDob = localStorage.getItem('meme_capsule_user_dob');
+    if (!savedDob) {
+      // Must prompt for DOB on initial launch
+      setIsDobModalOpen(true);
     } else {
-      const hasSeen = localStorage.getItem('has_seen_onboarding');
-      if (!hasSeen) {
-        setIsOnboardingOpen(true);
+      const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
+      if (policyVersion !== '1.1') {
+        setIsConsentModalOpen(true);
+      } else {
+        const hasSeen = localStorage.getItem('has_seen_onboarding');
+        if (!hasSeen) {
+          setIsOnboardingOpen(true);
+        }
       }
     }
 
@@ -1312,7 +1343,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
   }, []);
 
   const showHomeBanner = Boolean(AD_UNITS.banner) && activeTab === 'home' && screen === 'waiting' &&
-    !isStoreOpen && !isConsentModalOpen && !isOnboardingOpen && !shareTargetMeme && !rewardBusy &&
+    !isDobModalOpen && !isStoreOpen && !isConsentModalOpen && !isOnboardingOpen && !shareTargetMeme && !rewardBusy &&
     !entitlements.adsRemoved && !isInAdFreeWindow();
   useEffect(() => {
     void setBannerVisible(showHomeBanner).catch(() => undefined);
@@ -1698,6 +1729,11 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
   };
 
   const fetchMeme = async () => {
+    if (!localStorage.getItem('meme_capsule_user_dob')) {
+      setIsDobModalOpen(true);
+      return;
+    }
+
     setShowReactionPicker(false);
     setShowBoardPicker(false);
     setErrorMsg('');
@@ -2300,6 +2336,11 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
           {toastText}
         </div>
       )}
+
+      <DateOfBirthModal
+        isOpen={isDobModalOpen}
+        onConfirm={handleConfirmDob}
+      />
 
       <PrivacyConsentModal
         isOpen={isConsentModalOpen}
@@ -3783,6 +3824,26 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                   <Shield size={16} />
                   <span>PRIVACY, LEGAL & ABOUT</span>
                 </span>
+
+                {/* Date of Birth Verification Status Card */}
+                <div className="w-full bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between shadow-[2px_2px_0px_0px_#000]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="bg-[#f4c300]/20 border border-[#f4c300] p-1.5 text-[#f4c300]">
+                      <Calendar size={18} />
+                    </div>
+                    <div>
+                      <span className="font-label-xl text-[13px] text-white uppercase block font-bold">
+                        AGE VERIFICATION (DOB)
+                      </span>
+                      <span className="font-sans text-[11px] text-neutral-400 block">
+                        {userDob ? `Verified (${userDob}) • Locked to device` : 'Verified (18+) • Single-entry locked'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="font-label-md text-[10px] bg-[#152000] text-[#ceff8c] border border-[#7abb00] px-2 py-0.5 uppercase font-bold">
+                    LOCKED ✓
+                  </span>
+                </div>
 
                 <a
                   href="https://memecapsule.wtf/privacy"
