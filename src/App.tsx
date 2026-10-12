@@ -823,17 +823,6 @@ export default function App() {
     setUserDob(dob);
     setIsDobModalOpen(false);
     showToast('AGE VERIFIED (18+) ✓ WELCOME!', 'success');
-
-    // After DOB is verified on initial launch, proceed to privacy policy if needed
-    const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
-    if (policyVersion !== '1.1') {
-      setIsConsentModalOpen(true);
-    } else {
-      const hasSeen = localStorage.getItem('has_seen_onboarding');
-      if (!hasSeen) {
-        setIsOnboardingOpen(true);
-      }
-    }
   }, []);
 
   const handleAgreePolicy = useCallback(() => {
@@ -843,6 +832,11 @@ export default function App() {
     const hasSeen = localStorage.getItem('has_seen_onboarding');
     if (!hasSeen) {
       setIsOnboardingOpen(true);
+    } else {
+      const savedDob = localStorage.getItem('meme_capsule_user_dob');
+      if (!savedDob) {
+        setIsDobModalOpen(true);
+      }
     }
   }, []);
 
@@ -933,18 +927,17 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    const savedDob = localStorage.getItem('meme_capsule_user_dob');
-    if (!savedDob) {
-      // Must prompt for DOB on initial launch
-      setIsDobModalOpen(true);
+    const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
+    if (policyVersion !== '1.1') {
+      setIsConsentModalOpen(true);
     } else {
-      const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
-      if (policyVersion !== '1.1') {
-        setIsConsentModalOpen(true);
+      const hasSeen = localStorage.getItem('has_seen_onboarding');
+      if (!hasSeen) {
+        setIsOnboardingOpen(true);
       } else {
-        const hasSeen = localStorage.getItem('has_seen_onboarding');
-        if (!hasSeen) {
-          setIsOnboardingOpen(true);
+        const savedDob = localStorage.getItem('meme_capsule_user_dob');
+        if (!savedDob) {
+          setIsDobModalOpen(true);
         }
       }
     }
@@ -2360,6 +2353,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         onClose={() => {
           setIsOnboardingOpen(false);
           localStorage.setItem('has_seen_onboarding', 'true');
+          const savedDob = localStorage.getItem('meme_capsule_user_dob');
+          if (!savedDob) {
+            setIsDobModalOpen(true);
+          }
         }}
         onOpenPrivacyPolicy={() => setIsPolicyModalOpen(true)}
       />
