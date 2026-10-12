@@ -25,15 +25,46 @@ import {
   X,
   Sparkles,
   Flag,
+  Shield,
+  Settings,
+  RotateCcw,
+  ExternalLink,
+  HelpCircle,
+  Check,
+  Zap,
+  MoreVertical,
+  Star,
 } from 'lucide-react';
 import { Share } from '@capacitor/share';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { AdMob } from '@capacitor-community/admob';
+import { maybeShowInterstitial as showInterstitial, setBannerVisible } from './monetization/ads';
+import { AD_UNITS } from './monetization/adsConfig';
+import { showRewardedAd } from './monetization/rewardedAds';
+import { canCreateBoard, getAdFreeExpiry, grantAdFreeWindow, grantBonusBoard, grantThemedPack, isInAdFreeWindow, resetBonusBoards, startRewardSession } from './monetization/rewards';
+import { MONETIZATION_CHANGED, MONETIZATION_TOAST } from './monetization/events';
+import type { PackId } from './monetization/packs';
+import RewardPacks from './components/RewardPacks';
+import StoreScreen from './components/store/StoreScreen';
+import DropModeSelector from './components/DropModeSelector';
+import { ARCADE_FX_STYLES, getActiveFx, setActiveFx, FX_CHANGED, type ArcadeFxStyle } from './monetization/arcadeFx';
+import ProductPurchase from './components/ProductPurchase';
+import ThemePicker, { THEME_CHANGED, THEME_KEY } from './components/ThemePicker';
+import { useEntitlements } from './monetization/hooks';
+import { getEntitlements, hasRemovedAds } from './monetization/entitlements';
+import { restorePurchases } from './monetization/purchases';
+import { PRODUCTS, type ProductId } from './monetization/products';
+import './monetization/themes.css';
 import { useAnalytics, ANALYTICS_API_BASE, getDeviceId } from './analytics';
 import OnboardingModal from './OnboardingModal';
-import ProUpgradeModal from './ProUpgradeModal';
 import ReportModal from './ReportModal';
+import UnpinModal from './UnpinModal';
+import CreateBoardModal from './CreateBoardModal';
+import ShareModal, { buildMemeShareMessage } from './ShareModal';
+import PrivacyPolicyModal from './components/PrivacyPolicyModal';
+import PrivacyConsentModal from './components/PrivacyConsentModal';
+import RatingModal from './components/RatingModal';
 import { MemeStack, MemeStackRef } from './components/MemeStack';
+import { memeDimensionCache, computeCanvasDimensions, CanvasDimensions } from './utils/dimensions';
 import type { Meme, MoodBoard, DismissDecision } from './types';
 
 export type { Meme, MoodBoard };
@@ -43,17 +74,24 @@ declare global {
     MemeCapsuleAndroid?: {
       downloadImage: (url: string, fileName: string) => void;
       shareImage: (url: string, fileName: string, title: string) => void;
+      shareImageToApp?: (url: string, fileName: string, shareText: string, targetPackage: string) => void;
+      shouldRestoreRunningSession?: () => boolean;
+      openPlayStoreListing?: () => void;
     };
   }
 }
 
 const RANDOM_MEME_ENDPOINT = 'https://meme-capsule-eww.pages.dev/api/random-meme';
 const REDDIT_MEME_ENDPOINT = 'https://meme-api.com/gimme';
-const ADMOB_INTERSTITIAL_ID = 'ca-app-pub-2093403233028868/3926550523';
-const ADMOB_REWARDED_INTERSTITIAL_ID = 'ca-app-pub-2093403233028868/2261969271';
-const INTERSTITIAL_FREQUENCY = 4;
-const IAP_PRODUCT_ID = 'remove_ads_forever';
 const FREE_VAULT_LIMIT = 20;
+
+const getBoardHex = (color?: string): string => {
+  if (!color) return '#f4c300';
+  if (color === 'primary') return '#9b30ff';
+  if (color === 'secondary') return '#f4c300';
+  if (color === 'tertiary') return '#ff007f';
+  return color;
+};
 
 type BackendMemePayload = {
   id?: string;
@@ -154,7 +192,7 @@ const fetchRedditMemePayload = () => fetchJson(REDDIT_MEME_ENDPOINT);
 const safeFileName = (title: string) =>
   `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'meme-capsule'}.jpg`;
 
-type TabType = 'home' | 'favorites' | 'boards';
+type TabType = 'home' | 'favorites' | 'boards' | 'settings';
 type ScreenState = 'waiting' | 'loading' | 'viewing' | 'error';
 
 const MEME_REACTIONS = [
@@ -167,14 +205,125 @@ const MEME_REACTIONS = [
 ];
 
 const SWIPE_THRESHOLD = 50;
-const PIPELINE_TARGET_SIZE = 7;
+const STACK_BATCH_SIZE = 10;
+const PIPELINE_TARGET_SIZE = 12;
 const PIPELINE_INITIAL_BATCH = 5;
+const STACK_PREFETCH_CONSUMPTION_RATIO = 0.6; // Trigger next stack fetch when 60%-70% of loaded memes are viewed
+const FIFO_REFILL_TRIGGER_SIZE = Math.ceil(STACK_BATCH_SIZE * (1 - STACK_PREFETCH_CONSUMPTION_RATIO)); // 4 memes remaining
+const ACTIVE_SESSION_STORAGE_KEY = 'meme_capsule_active_session_v1';
+const SHARE_HANDOFF_STORAGE_KEY = 'meme_capsule_share_handoff_v1';
+
+interface ActiveSessionSnapshot {
+  meme: Meme | null;
+  screen: ScreenState;
+  memeQueue: Meme[];
+  memeHistory: Meme[];
+  historyIndex: number;
+  activeTab: TabType;
+  multiDropMemes: Meme[];
+  multiDropIndex: number;
+  isMultiDropView: boolean;
+  dimensions?: Record<string, { width: number; height: number }>;
+  savedAt: number;
+}
+
+function loadPersistedSession(): ActiveSessionSnapshot | null {
+  try {
+    // Always remove any legacy disk-persisted key from v3.0/v3.1 so closing background apps never forces an old meme on cold start
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+
+    // Check native Android process/task state: if the app was removed from running background apps and cold-launched, start on Homepage
+    if (
+      typeof window !== 'undefined' &&
+      window.MemeCapsuleAndroid &&
+      typeof window.MemeCapsuleAndroid.shouldRestoreRunningSession === 'function'
+    ) {
+      const shouldRestore = window.MemeCapsuleAndroid.shouldRestoreRunningSession();
+      if (!shouldRestore) {
+        sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+        localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+        return null;
+      }
+    }
+
+    // 1. Primary: sessionStorage (survives switching between running apps, automatically wiped when app is closed from Recents)
+    let raw = sessionStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+
+    // 2. Fallback: One-time short-lived share handoff (only if returning from an external share intent within 2 minutes)
+    if (!raw) {
+      const handoffRaw = localStorage.getItem(SHARE_HANDOFF_STORAGE_KEY);
+      if (handoffRaw) {
+        localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+        const handoffParsed = JSON.parse(handoffRaw) as ActiveSessionSnapshot;
+        if (handoffParsed && handoffParsed.savedAt && Date.now() - handoffParsed.savedAt < 120_000) {
+          raw = handoffRaw;
+          sessionStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, handoffRaw);
+        }
+      }
+    } else {
+      localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+    }
+
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ActiveSessionSnapshot;
+    if (!parsed || !parsed.meme || !parsed.meme.url) return null;
+
+    let reportedList: string[] = [];
+    try {
+      reportedList = JSON.parse(localStorage.getItem('reported_memes') || '[]');
+    } catch {
+      reportedList = [];
+    }
+    if (reportedList.includes(parsed.meme.url)) return null;
+
+    if (parsed.dimensions && typeof parsed.dimensions === 'object') {
+      for (const [url, dims] of Object.entries(parsed.dimensions)) {
+        if (dims && typeof dims.width === 'number' && typeof dims.height === 'number' && dims.width > 0 && dims.height > 0) {
+          memeDimensionCache.set(url, dims);
+        }
+      }
+    }
+
+    const filteredQueue = Array.isArray(parsed.memeQueue)
+      ? parsed.memeQueue.filter((m) => m && m.url && !reportedList.includes(m.url))
+      : [];
+    const filteredHistory = Array.isArray(parsed.memeHistory)
+      ? parsed.memeHistory.filter((m) => m && m.url && !reportedList.includes(m.url))
+      : [parsed.meme];
+
+    return {
+      meme: parsed.meme,
+      screen: 'viewing',
+      memeQueue: filteredQueue,
+      memeHistory: filteredHistory.length > 0 ? filteredHistory : [parsed.meme],
+      historyIndex: typeof parsed.historyIndex === 'number' ? parsed.historyIndex : -1,
+      activeTab:
+        parsed.activeTab && ['home', 'favorites', 'boards'].includes(parsed.activeTab)
+          ? parsed.activeTab
+          : 'home',
+      multiDropMemes: Array.isArray(parsed.multiDropMemes) ? parsed.multiDropMemes : [],
+      multiDropIndex: typeof parsed.multiDropIndex === 'number' ? parsed.multiDropIndex : 0,
+      isMultiDropView: Boolean(parsed.isMultiDropView),
+      dimensions: parsed.dimensions || {},
+      savedAt: parsed.savedAt || Date.now(),
+    };
+  } catch (err) {
+    console.warn('Failed to restore active meme session:', err);
+    return null;
+  }
+}
 
 export default function App() {
   const { trackEvent } = useAnalytics();
-  const [activeTab, setActiveTab] = useState<TabType>('home');
-  const [screen, setScreen] = useState<ScreenState>('waiting');
-  const [meme, setMeme] = useState<Meme | null>(null);
+  const initialSessionRef = useRef<ActiveSessionSnapshot | null | undefined>(undefined);
+  if (initialSessionRef.current === undefined) {
+    initialSessionRef.current = loadPersistedSession();
+  }
+  const hydratedSession = initialSessionRef.current;
+
+  const [activeTab, setActiveTab] = useState<TabType>(() => hydratedSession?.activeTab || 'home');
+  const [screen, setScreen] = useState<ScreenState>(() => (hydratedSession?.meme ? 'viewing' : 'waiting'));
+  const [meme, setMeme] = useState<Meme | null>(() => hydratedSession?.meme || null);
   const [imageFailed, setImageFailed] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [loadProgress, setLoadProgress] = useState(0);
@@ -193,15 +342,170 @@ export default function App() {
   const [shakeCard, setShakeCard] = useState(false);
   const [memeFeedback, setMemeFeedback] = useState<string | null>(null);
   const [jokeIndex, setJokeIndex] = useState(0);
-  const [adMobReady, setAdMobReady] = useState(false);
+  const [rewardBusy, setRewardBusy] = useState(false);
+  const rewardBusyRef = useRef(false);
+  const [boardLimitReached, setBoardLimitReached] = useState(false);
+  const [, refreshPerks] = useState(0);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const [isPro, setIsPro] = useState(false);
-  const [isProModalOpen, setIsProModalOpen] = useState(false);
-  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
+  const { entitlements, busy: isPurchasing } = useEntitlements();
+  const isPro = entitlements.legacyCollectionAccess;
+  const [storeFocus, setStoreFocus] = useState<ProductId | null>(null);
+  const [isStoreOpen, setIsStoreOpen] = useState(false);
+  const openStore = useCallback((opts?: { focus?: ProductId }) => {
+    setStoreFocus(opts?.focus ?? null);
+    setIsStoreOpen(true);
+  }, []);
+  const closeStore = useCallback(() => {
+    if (window.history.state?.memeCapsuleStore) window.history.back();
+    else {
+      setIsStoreOpen(false);
+      setStoreFocus(null);
+    }
+  }, []);
+  const [dropMode, setDropMode] = useState<string>('all');
+  const [activeFx, setActiveFxState] = useState<ArcadeFxStyle>(() => getActiveFx(entitlements.ownedFx));
+  useEffect(() => {
+    const update = () => setActiveFxState(getActiveFx(entitlements.ownedFx));
+    window.addEventListener(FX_CHANGED, update);
+    return () => window.removeEventListener(FX_CHANGED, update);
+  }, [entitlements.ownedFx]);
+  const [selectedTheme, setSelectedTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'classic');
+  const activeTheme = entitlements.ownedThemes.includes(selectedTheme) ? selectedTheme : 'classic';
   const [streak, setStreak] = useState(1);
-  const [multiDropMemes, setMultiDropMemes] = useState<Meme[]>([]);
-  const [multiDropIndex, setMultiDropIndex] = useState(0);
-  const [isMultiDropView, setIsMultiDropView] = useState(false);
+  const [multiDropMemes, setMultiDropMemes] = useState<Meme[]>(() => hydratedSession?.multiDropMemes || []);
+  const [multiDropIndex, setMultiDropIndex] = useState<number>(() => hydratedSession?.multiDropIndex || 0);
+  const [isMultiDropView, setIsMultiDropView] = useState<boolean>(() => hydratedSession?.isMultiDropView || false);
+  const [canvasDimensions, setCanvasDimensions] = useState<CanvasDimensions>(() => {
+    const initialUrl = hydratedSession?.meme?.url;
+    const cached = initialUrl ? memeDimensionCache.get(initialUrl) : undefined;
+    return computeCanvasDimensions(cached?.width, cached?.height);
+  });
+
+  // Settings & History Preferences
+  const [redditStreamEnabled, setRedditStreamEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('pref_reddit_stream') !== 'false';
+  });
+  const [shakeEffectsEnabled, setShakeEffectsEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('pref_shake_effects') !== 'false';
+  });
+  const [prefetchEnabled, setPrefetchEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('pref_prefetch_buffer') !== 'false';
+  });
+  const [blockedMemesCount, setBlockedMemesCount] = useState<number>(() => {
+    try {
+      const list = JSON.parse(localStorage.getItem('reported_memes') || '[]');
+      return Array.isArray(list) ? list.length : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [confirmWipeMode, setConfirmWipeMode] = useState<'none' | 'history' | 'vault' | 'all'>('none');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const prevTabRef = useRef<'home' | 'favorites' | 'boards'>('home');
+  const [ctaEffects, setCtaEffects] = useState<{
+    key: 'like' | 'vault' | 'pin' | 'more' | null;
+    tick: number;
+    x: number;
+    y: number;
+    size: number;
+    color: string;
+  }>({ key: null, tick: 0, x: 0, y: 0, size: 0, color: '#FF2A85' });
+
+  const triggerCtaEffect = useCallback((
+    key: 'like' | 'vault' | 'pin' | 'more',
+    color: string,
+    e: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 2;
+    const x = (e.clientX || rect.left + rect.width / 2) - rect.left - size / 2;
+    const y = (e.clientY || rect.top + rect.height / 2) - rect.top - size / 2;
+    setCtaEffects({ key, tick: Date.now(), x, y, size, color });
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setConfirmWipeMode('none');
+    setActiveTab(prevTabRef.current || 'home');
+  }, []);
+
+  const toggleSettings = useCallback(() => {
+    setShowMoreMenu(false);
+    if (activeTab === 'settings') {
+      closeSettings();
+    } else {
+      prevTabRef.current = activeTab;
+      setActiveTab('settings');
+    }
+  }, [activeTab, closeSettings]);
+
+  useEffect(() => {
+    if (activeTab !== 'settings' || isStoreOpen) return;
+    if (!window.history.state?.memeCapsuleSettings) window.history.pushState({ memeCapsuleSettings: true }, '');
+    const handlePopState = () => {
+      closeSettings();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeSettings();
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeTab, closeSettings, isStoreOpen]);
+
+  const handleDimensionsLoaded = useCallback((dims: { width: number; height: number }) => {
+    if (meme?.url) {
+      memeDimensionCache.set(meme.url, dims);
+    }
+    setCanvasDimensions(computeCanvasDimensions(dims.width, dims.height));
+  }, [meme?.url]);
+
+  useEffect(() => {
+    if (meme?.url) {
+      const cached = memeDimensionCache.get(meme.url);
+      if (cached) {
+        setCanvasDimensions(computeCanvasDimensions(cached.width, cached.height));
+      }
+    }
+  }, [meme?.url]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (meme?.url) {
+        const cached = memeDimensionCache.get(meme.url);
+        setCanvasDimensions(computeCanvasDimensions(cached?.width, cached?.height));
+      } else {
+        setCanvasDimensions(computeCanvasDimensions());
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [meme?.url]);
+
+  // Global prevention of text selection and copying across non-input elements
+  useEffect(() => {
+    const preventSelection = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    document.addEventListener('selectstart', preventSelection);
+    document.addEventListener('copy', preventSelection);
+
+    return () => {
+      document.removeEventListener('selectstart', preventSelection);
+      document.removeEventListener('copy', preventSelection);
+    };
+  }, []);
 
   // Reaction state
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -214,8 +518,8 @@ export default function App() {
   // Swipe state
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchDeltaY, setTouchDeltaY] = useState(0);
-  const [memeHistory, setMemeHistory] = useState<Meme[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [memeHistory, setMemeHistory] = useState<Meme[]>(() => hydratedSession?.memeHistory || []);
+  const [historyIndex, setHistoryIndex] = useState<number>(() => hydratedSession?.historyIndex ?? -1);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'up' | 'down' | null>(null);
   const [exitDirection, setExitDirection] = useState<'up' | 'down' | null>(null);
@@ -227,6 +531,8 @@ export default function App() {
   const likeScaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pinnedMemes, setPinnedMemes] = useState<Meme[]>([]);
   const [unpinTargetMeme, setUnpinTargetMeme] = useState<Meme | null>(null);
+  const [reportTargetMeme, setReportTargetMeme] = useState<Meme | null>(null);
+  const [shareTargetMeme, setShareTargetMeme] = useState<Meme | null>(null);
   const unpinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleImagePointerDown = useCallback(() => {
@@ -243,9 +549,147 @@ export default function App() {
   }, []);
 
   // Pipeline queue (FIFO buffer of pre-fetched memes)
-  const [memeQueue, setMemeQueue] = useState<Meme[]>([]);
+  const [memeQueue, setMemeQueue] = useState<Meme[]>(() => hydratedSession?.memeQueue || []);
   const [queueFetchCounter, setQueueFetchCounter] = useState(0);
   const isFillingQueue = useRef(false);
+  const pendingRefillRef = useRef(false);
+  const memeQueueRef = useRef<Meme[]>(memeQueue);
+  memeQueueRef.current = memeQueue;
+  const stackBatchTotalRef = useRef<number>(
+    Math.max(STACK_BATCH_SIZE, (hydratedSession?.memeQueue?.length || 0) + 1)
+  );
+  const stackBatchViewedRef = useRef<number>(0);
+  const fetchSeedCursorRef = useRef<number>(0);
+
+  // Active session snapshot persistence (prevents losing active meme & queue when sharing to external apps or backgrounding)
+  const sessionStateRef = useRef({
+    meme,
+    screen,
+    memeQueue,
+    memeHistory,
+    historyIndex,
+    activeTab,
+    multiDropMemes,
+    multiDropIndex,
+    isMultiDropView,
+  });
+  sessionStateRef.current = {
+    meme,
+    screen,
+    memeQueue,
+    memeHistory,
+    historyIndex,
+    activeTab,
+    multiDropMemes,
+    multiDropIndex,
+    isMultiDropView,
+  };
+
+  const persistActiveSession = useCallback((forExternalShare = false) => {
+    const current = sessionStateRef.current;
+    if (!current.meme || !current.meme.url) return;
+    try {
+      const dimsToSave: Record<string, { width: number; height: number }> = {};
+      const urlsToTrack = new Set<string>([
+        current.meme.url,
+        ...current.memeQueue.map((m) => m.url),
+        ...current.memeHistory.slice(-6).map((m) => m.url),
+      ]);
+      urlsToTrack.forEach((url) => {
+        if (url) {
+          const d = memeDimensionCache.get(url);
+          if (d) dimsToSave[url] = d;
+        }
+      });
+
+      const snapshot: ActiveSessionSnapshot = {
+        meme: current.meme,
+        screen: 'viewing',
+        memeQueue: current.memeQueue.slice(0, PIPELINE_TARGET_SIZE),
+        memeHistory: current.memeHistory.slice(-15),
+        historyIndex: current.historyIndex,
+        activeTab: current.activeTab === 'settings' ? 'home' : current.activeTab,
+        multiDropMemes: current.multiDropMemes,
+        multiDropIndex: current.multiDropIndex,
+        isMultiDropView: current.isMultiDropView,
+        dimensions: dimsToSave,
+        savedAt: Date.now(),
+      };
+      const serialized = JSON.stringify(snapshot);
+      // Save to sessionStorage so switching between running apps preserves state, while closing background apps starts fresh on Homepage
+      sessionStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, serialized);
+      if (forExternalShare) {
+        localStorage.setItem(SHARE_HANDOFF_STORAGE_KEY, serialized);
+      }
+    } catch (err) {
+      console.warn('Could not persist active meme session:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (meme && meme.url) {
+      persistActiveSession(false);
+    }
+  }, [
+    meme,
+    screen,
+    memeQueue,
+    memeHistory,
+    historyIndex,
+    activeTab,
+    multiDropMemes,
+    multiDropIndex,
+    isMultiDropView,
+    canvasDimensions,
+    persistActiveSession,
+  ]);
+
+  useEffect(() => {
+    const handleFlush = () => {
+      persistActiveSession(false);
+    };
+    const handleResetToHome = () => {
+      sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+      setShowMoreMenu(false);
+      setActiveTab('home');
+      setScreen('waiting');
+      setMeme(null);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        persistActiveSession(false);
+      } else if (document.visibilityState === 'visible') {
+        // Ensure we stay in 'viewing' if a meme is already loaded in memory during app switching
+        if (sessionStateRef.current.meme && sessionStateRef.current.screen !== 'viewing') {
+          setScreen('viewing');
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleFlush);
+    window.addEventListener('blur', handleFlush);
+    window.addEventListener('meme-capsule-persist-session', handleFlush);
+    window.addEventListener('meme-capsule-reset-to-home', handleResetToHome);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleFlush);
+      window.removeEventListener('blur', handleFlush);
+      window.removeEventListener('meme-capsule-persist-session', handleFlush);
+      window.removeEventListener('meme-capsule-reset-to-home', handleResetToHome);
+    };
+  }, [persistActiveSession]);
+
+  // Warm browser image cache for hydrated session memes silently in the background
+  useEffect(() => {
+    if (!hydratedSession?.meme) return;
+    const urls = [hydratedSession.meme.url, ...hydratedSession.memeQueue.map((m) => m.url)].filter(Boolean);
+    urls.forEach((url) => {
+      void preloadImage(url, 4000);
+    });
+  }, [hydratedSession]);
 
   const deckMemes = useMemo(() => {
     if (isMultiDropView && multiDropMemes.length > 0) {
@@ -254,67 +698,224 @@ export default function App() {
     return meme ? [meme, ...memeQueue] : memeQueue;
   }, [isMultiDropView, multiDropMemes, multiDropIndex, meme, memeQueue]);
 
-  // Fill the pipeline queue when it drops below target (batched to prevent network congestion)
-  const fillPipeline = useCallback(async (currentQueueSize: number, startOffset: number) => {
-    if (isFillingQueue.current) return;
-    const needed = PIPELINE_TARGET_SIZE - currentQueueSize;
-    if (needed <= 0) return;
+  // Append a single validated meme directly into the live FIFO queue as soon as its preload finishes
+  const enqueueMemeToFifo = useCallback((candidate: Meme | null) => {
+    if (!candidate || !candidate.url) return;
+    setMemeQueue((prev) => {
+      const existingUrls = new Set(prev.map((m) => m.url));
+      if (sessionStateRef.current.meme?.url) {
+        existingUrls.add(sessionStateRef.current.meme.url);
+      }
+      if (existingUrls.has(candidate.url)) {
+        return prev;
+      }
+      const updated = [...prev, candidate].slice(0, PIPELINE_TARGET_SIZE);
+      memeQueueRef.current = updated;
+      return updated;
+    });
+    setQueueFetchCounter((prev) => prev + 1);
+  }, []);
+
+  // Rolling FIFO Stack Refill Engine: streams new memes into memeQueue without blocking or dropping refill triggers
+  const fillPipeline = useCallback(async (_currentQueueSize?: number, startOffset = 0) => {
+    if (localStorage.getItem('pref_prefetch_buffer') === 'false') return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+    if (startOffset > fetchSeedCursorRef.current) {
+      fetchSeedCursorRef.current = startOffset;
+    }
+
+    // If already filling when the 60-70% threshold is crossed, mark pendingRefillRef so the active runner continues seamlessly
+    if (isFillingQueue.current) {
+      pendingRefillRef.current = true;
+      return;
+    }
 
     isFillingQueue.current = true;
     try {
-      // Controlled batching in groups of 2 to prevent mobile connection saturation
-      const batchSize = 2;
-      for (let offset = 0; offset < needed; offset += batchSize) {
-        const count = Math.min(batchSize, needed - offset);
-        const batchPromises: Promise<Meme | null>[] = [];
-        for (let i = 0; i < count; i++) {
-          batchPromises.push(
-            fetchValidMeme(startOffset + offset + i + 1).catch((err) => {
-              console.warn(`Pipeline fetch #${offset + i} failed:`, err);
-              return null;
-            })
-          );
-        }
+      do {
+        pendingRefillRef.current = false;
+        let safetyRounds = 0;
+        const batchConcurrency = 3;
 
-        const results = await Promise.allSettled(batchPromises);
-        const newMemes: Meme[] = [];
-        for (const result of results) {
-          if (result.status === 'fulfilled' && result.value) {
-            newMemes.push(result.value);
+        while (memeQueueRef.current.length < PIPELINE_TARGET_SIZE && safetyRounds < 6) {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') break;
+          safetyRounds += 1;
+          const deficit = PIPELINE_TARGET_SIZE - memeQueueRef.current.length;
+          const waveSize = Math.min(batchConcurrency, Math.max(2, deficit));
+          const wavePromises: Promise<Meme | null>[] = [];
+
+          for (let i = 0; i < waveSize; i++) {
+            fetchSeedCursorRef.current += 1;
+            const seed = fetchSeedCursorRef.current;
+            wavePromises.push(
+              fetchValidMeme(seed)
+                .then((validMeme) => {
+                  // Stream directly into FIFO queue the instant this meme finishes preloading
+                  enqueueMemeToFifo(validMeme);
+                  return validMeme;
+                })
+                .catch((err) => {
+                  console.warn(`Pipeline wave fetch #${seed} failed:`, err);
+                  return null;
+                })
+            );
           }
+
+          await Promise.allSettled(wavePromises);
         }
 
-        if (newMemes.length > 0) {
-          setMemeQueue(prev => {
-            const existingUrls = new Set(prev.map(m => m.url));
-            const unique = newMemes.filter(m => !existingUrls.has(m.url));
-            return [...prev, ...unique].slice(0, PIPELINE_TARGET_SIZE);
-          });
-          setQueueFetchCounter(prev => prev + newMemes.length);
+        // Once the new stack is loaded into the FIFO buffer, reset the batch counter for the next 60%-70% trigger cycle
+        if (memeQueueRef.current.length >= STACK_BATCH_SIZE) {
+          stackBatchTotalRef.current = memeQueueRef.current.length + 1;
+          stackBatchViewedRef.current = 0;
         }
-      }
+      } while (
+        pendingRefillRef.current &&
+        memeQueueRef.current.length < PIPELINE_TARGET_SIZE &&
+        (typeof document === 'undefined' || document.visibilityState !== 'hidden')
+      );
     } finally {
       isFillingQueue.current = false;
     }
-  }, []);
+  }, [enqueueMemeToFifo]);
 
-  // Auto-fill pipeline when queue is low and we're in viewing state
-  useEffect(() => {
-    if (screen === 'viewing' && memeQueue.length < 3 && !isTransitioning) {
-      fillPipeline(memeQueue.length, totalMemesViewed + queueFetchCounter);
-    }
-  }, [screen, memeQueue.length, isTransitioning, fillPipeline, totalMemesViewed, queueFetchCounter]);
+  // Track how much of the loaded stack the user has viewed and trigger next stack fetch at 60%-70% consumption
+  const recordStackConsumptionAndMaybeRefill = useCallback(
+    (remainingQueueLength: number, baseOffset: number) => {
+      stackBatchViewedRef.current += 1;
+      const totalInCurrentStack = Math.max(1, stackBatchTotalRef.current);
+      const viewedFraction = stackBatchViewedRef.current / totalInCurrentStack;
 
+      // Trigger next stack fetch as soon as 60%-70% of the loaded memes have been viewed (or buffer drops to <= 4 memes)
+      if (
+        viewedFraction >= STACK_PREFETCH_CONSUMPTION_RATIO ||
+        remainingQueueLength <= FIFO_REFILL_TRIGGER_SIZE
+      ) {
+        stackBatchViewedRef.current = 0;
+        stackBatchTotalRef.current = Math.max(STACK_BATCH_SIZE, remainingQueueLength + STACK_BATCH_SIZE);
+        void fillPipeline(remainingQueueLength, baseOffset);
+      }
+    },
+    [fillPipeline]
+  );
+
+  // Auto-fill pipeline whenever queue is below the 60%-70% consumption threshold and we're in viewing state
   useEffect(() => {
+    const checkAndFill = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (screen === 'viewing' && memeQueue.length <= FIFO_REFILL_TRIGGER_SIZE) {
+        void fillPipeline(memeQueue.length, totalMemesViewed + queueFetchCounter);
+      }
+    };
+    checkAndFill();
+    document.addEventListener('visibilitychange', checkAndFill);
+    return () => document.removeEventListener('visibilitychange', checkAndFill);
+  }, [screen, memeQueue.length, fillPipeline, totalMemesViewed, queueFetchCounter]);
+
+  const handleAgreePolicy = useCallback(() => {
+    localStorage.setItem('privacy_policy_agreed_version', '1.1');
+    localStorage.setItem('privacy_policy_agreed_at', new Date().toISOString());
+    setIsConsentModalOpen(false);
     const hasSeen = localStorage.getItem('has_seen_onboarding');
     if (!hasSeen) {
       setIsOnboardingOpen(true);
     }
+  }, []);
 
-    // Pro status
-    const proStatus = localStorage.getItem('is_pro');
-    if (proStatus === 'true') {
-      setIsPro(true);
+  // --- Google Play Rating Feature ---
+  const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+
+  const redirectToPlayStore = useCallback(() => {
+    if (typeof window.MemeCapsuleAndroid?.openPlayStoreListing === 'function') {
+      window.MemeCapsuleAndroid.openPlayStoreListing();
+      return;
+    }
+    window.open('https://play.google.com/store/apps/details?id=com.meme.capsule', '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handleRateApp = useCallback((_stars: number) => {
+    localStorage.setItem('meme_capsule_rating_completed', 'true');
+    setIsRatingModalOpen(false);
+    redirectToPlayStore();
+    setToastType('secondary');
+    setToastText('THANKS FOR BACKING THE CHAOS! ⚡');
+    setTimeout(() => setToastText(null), 3000);
+  }, [redirectToPlayStore]);
+
+  const handleDeferRating = useCallback(() => {
+    const deferUntil = Date.now() + 24 * 60 * 60 * 1000;
+    localStorage.setItem('meme_capsule_rating_deferred_until', String(deferUntil));
+    localStorage.setItem('meme_capsule_rating_last_prompt_viewed', String(totalMemesViewed));
+    setIsRatingModalOpen(false);
+    setToastType('primary');
+    setToastText('RATING SNOOZED FOR 24 HOURS ⏰');
+    setTimeout(() => setToastText(null), 2500);
+  }, [totalMemesViewed]);
+
+  const checkRatingPromptEligibility = useCallback((viewedCount: number) => {
+    // 1. If user already registered feedback, never prompt again automatically
+    if (localStorage.getItem('meme_capsule_rating_completed') === 'true') {
+      return false;
+    }
+    // 2. If deferred, check if 24 hours have elapsed
+    const deferredUntil = Number(localStorage.getItem('meme_capsule_rating_deferred_until') || 0);
+    if (Date.now() < deferredUntil) {
+      return false;
+    }
+    // 3. Check meme viewed interval (first prompt at >= 8 memes, then every 15 memes)
+    const lastPromptViewed = Number(localStorage.getItem('meme_capsule_rating_last_prompt_viewed') || 0);
+    const shouldPrompt = (lastPromptViewed === 0 && viewedCount >= 8) ||
+                         (lastPromptViewed > 0 && viewedCount - lastPromptViewed >= 15);
+    return shouldPrompt;
+  }, []);
+
+  useEffect(() => {
+    if (screen !== 'loaded' || activeTab !== 'home') return;
+    if (!checkRatingPromptEligibility(totalMemesViewed)) return;
+
+    const timer = setTimeout(() => {
+      if (
+        !isConsentModalOpen &&
+        !isPolicyModalOpen &&
+        !isOnboardingOpen &&
+        !isStoreOpen &&
+        !shareTargetMeme &&
+        !isReportModalOpen &&
+        !unpinTargetMeme &&
+        !isBoardComposerOpen &&
+        !rewardBusyRef.current
+      ) {
+        setIsRatingModalOpen(true);
+        localStorage.setItem('meme_capsule_rating_last_prompt_viewed', String(totalMemesViewed));
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [
+    totalMemesViewed,
+    screen,
+    activeTab,
+    isConsentModalOpen,
+    isPolicyModalOpen,
+    isOnboardingOpen,
+    isStoreOpen,
+    shareTargetMeme,
+    isReportModalOpen,
+    unpinTargetMeme,
+    isBoardComposerOpen,
+    checkRatingPromptEligibility,
+  ]);
+
+  useEffect(() => {
+    const policyVersion = localStorage.getItem('privacy_policy_agreed_version');
+    if (policyVersion !== '1.1') {
+      setIsConsentModalOpen(true);
+    } else {
+      const hasSeen = localStorage.getItem('has_seen_onboarding');
+      if (!hasSeen) {
+        setIsOnboardingOpen(true);
+      }
     }
 
     // Streak tracking
@@ -342,10 +943,23 @@ export default function App() {
       localStorage.setItem('streak_last_date', today);
     }
 
+    let loadedFavs: Meme[] = [];
     const savedFavs = localStorage.getItem('meme_favorites');
     if (savedFavs) {
       try {
-        setFavorites(JSON.parse(savedFavs));
+        loadedFavs = JSON.parse(savedFavs);
+        setFavorites(loadedFavs);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    let loadedPins: Meme[] = [];
+    const savedPinboard = localStorage.getItem('meme_pinboard');
+    if (savedPinboard) {
+      try {
+        loadedPins = JSON.parse(savedPinboard);
+        setPinnedMemes(loadedPins);
       } catch (e) {
         console.error(e);
       }
@@ -357,6 +971,34 @@ export default function App() {
         const boards = JSON.parse(savedBoards) as MoodBoard[];
         setMoodBoards(boards);
         setSelectedBoardId(boards[0]?.id || null);
+
+        // RECOVERY & SYNCHRONIZATION:
+        // Ensure every meme URL across all mood boards has a corresponding Meme object in pinnedMemes
+        const allBoardUrls = Array.from(new Set(boards.flatMap((b) => b.memeUrls)));
+        let pinboardUpdated = false;
+        const currentPins = [...loadedPins];
+
+        for (const url of allBoardUrls) {
+          if (!currentPins.some((p) => p.url === url)) {
+            const fromFav = loadedFavs.find((f) => f.url === url);
+            const recoveredMeme: Meme = fromFav
+              ? { ...fromFav, savedAt: fromFav.savedAt || Date.now() }
+              : {
+                  url,
+                  title: 'PINNED MEME',
+                  author: 'MemeCapsule',
+                  source: 'Meme Capsule',
+                  savedAt: Date.now(),
+                };
+            currentPins.unshift(recoveredMeme);
+            pinboardUpdated = true;
+          }
+        }
+
+        if (pinboardUpdated) {
+          setPinnedMemes(currentPins);
+          localStorage.setItem('meme_pinboard', JSON.stringify(currentPins));
+        }
       } catch (e) {
         console.error(e);
       }
@@ -366,15 +1008,6 @@ export default function App() {
     if (savedReactions) {
       try {
         setMemeReactions(JSON.parse(savedReactions));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
-    const savedPinboard = localStorage.getItem('meme_pinboard');
-    if (savedPinboard) {
-      try {
-        setPinnedMemes(JSON.parse(savedPinboard));
       } catch (e) {
         console.error(e);
       }
@@ -399,12 +1032,6 @@ export default function App() {
       setJokeIndex((prev) => (prev + 1) % DEV_JOKES.length);
     }, 12000);
 
-    if (Capacitor.isNativePlatform()) {
-      AdMob.initialize({ initializeForTesting: false })
-        .then(() => setAdMobReady(true))
-        .catch((error) => console.warn('AdMob init failed', error));
-    }
-
     return () => clearInterval(jokeTimer);
   }, []);
 
@@ -413,26 +1040,72 @@ export default function App() {
       const pinned = JSON.parse(
         localStorage.getItem('meme_pinboard') ?? '[]'
       ) as Meme[];
-      setPinnedMemes(pinned);
+      if (Array.isArray(pinned) && pinned.length > 0) {
+        setPinnedMemes(pinned);
+      } else {
+        const savedBoards = localStorage.getItem('meme_mood_boards');
+        if (savedBoards) {
+          const boards = JSON.parse(savedBoards) as MoodBoard[];
+          const allUrls = Array.from(new Set(boards.flatMap((b) => b.memeUrls)));
+          if (allUrls.length > 0) {
+            const savedFavs = JSON.parse(localStorage.getItem('meme_favorites') ?? '[]') as Meme[];
+            const recovered: Meme[] = allUrls.map((url) => {
+              const f = savedFavs.find((item) => item.url === url);
+              return f || {
+                url,
+                title: 'PINNED MEME',
+                author: 'MemeCapsule',
+                source: 'Meme Capsule',
+                savedAt: Date.now(),
+              };
+            });
+            setPinnedMemes(recovered);
+            localStorage.setItem('meme_pinboard', JSON.stringify(recovered));
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
     }
   }, [activeTab]);
 
   const maybeShowInterstitial = async (nextViewed: number) => {
-    if (isPro || !Capacitor.isNativePlatform() || !adMobReady || nextViewed % INTERSTITIAL_FREQUENCY !== 0) return;
+    await showInterstitial(nextViewed);
+  };
 
+  const watchForReward = async (grant: () => void, message: string) => {
+    if (rewardBusyRef.current) return;
+    rewardBusyRef.current = true;
+    setRewardBusy(true);
+    showToast('LOADING REWARDED AD...', 'primary');
     try {
-      await AdMob.prepareInterstitial({
-        adId: ADMOB_INTERSTITIAL_ID,
-        isTesting: false,
-        npa: false,
-      });
-      await AdMob.showInterstitial();
-    } catch (error) {
-      console.warn('AdMob interstitial skipped', error);
+      // Paid ad-free ownership includes the optional reward perks without video.
+      if (await hasRemovedAds()) {
+        grant();
+        showToast(message, 'success');
+        return;
+      }
+      const result = await showRewardedAd();
+      if (result.rewarded === true) {
+        grant();
+        showToast(message, 'success');
+      } else {
+        showToast('NO REWARD EARNED. TRY AGAIN WHEN READY.', 'secondary');
+      }
+    } catch {
+      showToast('REWARDS UNAVAILABLE. TRY AGAIN.', 'secondary');
+    } finally {
+      rewardBusyRef.current = false;
+      setRewardBusy(false);
     }
   };
+
+  const watchForAdFree = () => watchForReward(grantAdFreeWindow, 'AD-FREE FOR 30 MIN ✓');
+  const watchForPack = (id: PackId) => watchForReward(() => grantThemedPack(id), 'PACK UNLOCKED FOR 24H ✓');
+  const watchForBoard = () => watchForReward(() => {
+    grantBonusBoard();
+    setBoardLimitReached(false);
+  }, '+1 BOARD SLOT THIS SESSION ✓');
 
   const showRewardedAdAndGetBonus = async () => {
     // Pro users get instant bonus drops without ads
@@ -442,39 +1115,7 @@ export default function App() {
       return;
     }
 
-    if (!Capacitor.isNativePlatform()) {
-      showToast('REWARD UNLOCKED: DANK DROP READY!', 'success');
-      void fetchMeme();
-      return;
-    }
-
-    try {
-      showToast('LOADING REWARDED AD...', 'primary');
-      await AdMob.prepareRewardInterstitialAd({
-        adId: ADMOB_REWARDED_INTERSTITIAL_ID,
-        isTesting: false,
-        npa: false,
-      });
-      await AdMob.showRewardInterstitialAd();
-      showToast('REWARD UNLOCKED! FRESH DROP INCOMING!', 'success');
-      void fetchMeme();
-    } catch (error) {
-      console.warn('Rewarded Interstitial skipped or failed, trying video fallback', error);
-      try {
-        await AdMob.prepareRewardVideoAd({
-          adId: ADMOB_REWARDED_INTERSTITIAL_ID,
-          isTesting: false,
-          npa: false,
-        });
-        await AdMob.showRewardVideoAd();
-        showToast('REWARD UNLOCKED! FRESH DROP INCOMING!', 'success');
-        void fetchMeme();
-      } catch (fallbackError) {
-        console.warn('Rewarded video fallback failed', fallbackError);
-        showToast('ENJOY YOUR BONUS DROP!', 'secondary');
-        void fetchMeme();
-      }
-    }
+    await watchForReward(() => { void fetchMeme(); }, 'REWARD UNLOCKED! FRESH DROP INCOMING!');
   };
 
 const preloadImage = (url: string, timeoutMs = 3500): Promise<boolean> => {
@@ -494,6 +1135,9 @@ const preloadImage = (url: string, timeoutMs = 3500): Promise<boolean> => {
       if (settled) return;
       settled = true;
       cleanup();
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        memeDimensionCache.set(url, { width: img.naturalWidth, height: img.naturalHeight });
+      }
       resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
     };
 
@@ -532,7 +1176,8 @@ const isValidImageUrl = (url: string): boolean => {
 };
 
 const fetchMixedMeme = async (nextViewed: number): Promise<Meme> => {
-  const shouldFetchReddit = nextViewed % 3 === 0;
+  const allowReddit = localStorage.getItem('pref_reddit_stream') !== 'false';
+  const shouldFetchReddit = allowReddit && nextViewed % 3 === 0;
 
   if (shouldFetchReddit) {
     try {
@@ -620,13 +1265,175 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     setTimeout(() => setToastText(null), 2500);
   };
 
+  useEffect(() => {
+    startRewardSession();
+    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      refreshPerks(value => value + 1);
+      clearTimeout(expiryTimer);
+      const remaining = getAdFreeExpiry() - Date.now();
+      if (remaining > 0) expiryTimer = setTimeout(refresh, Math.min(remaining + 1, 2147483647));
+    };
+    refresh();
+    const toast = (event: Event) => showToast((event as CustomEvent<string>).detail, 'success');
+    window.addEventListener(MONETIZATION_CHANGED, refresh);
+    window.addEventListener(MONETIZATION_TOAST, toast);
+    window.addEventListener('meme-capsule-reset-to-home', resetBonusBoards);
+    return () => {
+      clearTimeout(expiryTimer);
+      window.removeEventListener(MONETIZATION_CHANGED, refresh);
+      window.removeEventListener(MONETIZATION_TOAST, toast);
+      window.removeEventListener('meme-capsule-reset-to-home', resetBonusBoards);
+    };
+  }, []);
+
+  useEffect(() => {
+    const themeChanged = () => setSelectedTheme(localStorage.getItem(THEME_KEY) || 'classic');
+    const reconcile = () => {
+      if (document.visibilityState === 'visible') void getEntitlements(true).catch(() => undefined);
+    };
+    const checkTtl = () => {
+      if (document.visibilityState === 'visible') void getEntitlements().catch(() => undefined);
+    };
+    reconcile();
+    const timer = window.setInterval(checkTtl, 60_000);
+    document.addEventListener('visibilitychange', reconcile);
+    window.addEventListener('focus', reconcile);
+    window.addEventListener(THEME_CHANGED, themeChanged);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', reconcile);
+      window.removeEventListener('focus', reconcile);
+      window.removeEventListener(THEME_CHANGED, themeChanged);
+    };
+  }, []);
+
+  const showHomeBanner = Boolean(AD_UNITS.banner) && activeTab === 'home' && screen === 'waiting' &&
+    !isStoreOpen && !isConsentModalOpen && !isOnboardingOpen && !shareTargetMeme && !rewardBusy &&
+    !entitlements.adsRemoved && !isInAdFreeWindow();
+  useEffect(() => {
+    void setBannerVisible(showHomeBanner).catch(() => undefined);
+    return () => { void setBannerVisible(false).catch(() => undefined); };
+  }, [showHomeBanner]);
+
   const showReaction = (text: string) => {
     setMemeFeedback(text);
-    setShakeCard(true);
+    if (shakeEffectsEnabled) {
+      setShakeCard(true);
+    }
     setTimeout(() => {
       setMemeFeedback(null);
       setShakeCard(false);
     }, 1000);
+  };
+
+  // --- Settings & History Management Handlers ---
+  const toggleRedditStream = () => {
+    const next = !redditStreamEnabled;
+    setRedditStreamEnabled(next);
+    localStorage.setItem('pref_reddit_stream', String(next));
+    showToast(next ? 'AUXILIARY REDDIT STREAM: ENABLED' : 'CURATED D1 VAULT ONLY: ENABLED', 'secondary');
+  };
+
+  const toggleShakeEffects = () => {
+    const next = !shakeEffectsEnabled;
+    setShakeEffectsEnabled(next);
+    localStorage.setItem('pref_shake_effects', String(next));
+    showToast(next ? 'CARD SHAKE EFFECTS: ON' : 'CARD SHAKE EFFECTS: OFF', 'secondary');
+  };
+
+  const togglePrefetchBuffer = () => {
+    const next = !prefetchEnabled;
+    setPrefetchEnabled(next);
+    localStorage.setItem('pref_prefetch_buffer', String(next));
+    if (!next) {
+      setMemeQueue([]);
+    }
+    showToast(next ? '7-MEME TURBO BUFFER: ENABLED' : 'DATA SAVER MODE: BUFFER PAUSED', 'secondary');
+  };
+
+  const handleClearViewHistory = () => {
+    setTotalMemesViewed(0);
+    setTotalMemesFetched(0);
+    setLikedMemes([]);
+    setMemeReactions({});
+    setMemeHistory([]);
+    setHistoryIndex(-1);
+    setMemeQueue([]);
+    localStorage.removeItem('total_memes_viewed');
+    localStorage.removeItem('total_memes_fetched');
+    localStorage.removeItem('liked_memes');
+    localStorage.removeItem('meme_reactions');
+    localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+    sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    memeDimensionCache.clear();
+    setConfirmWipeMode('none');
+    showToast('PAST VIEWING HISTORY & STATS CLEARED!', 'success');
+  };
+
+  const handleClearVaultAndBoards = () => {
+    setFavorites([]);
+    setMoodBoards([]);
+    setPinnedMemes([]);
+    setSelectedBoardId(null);
+    localStorage.removeItem('meme_favorites');
+    localStorage.removeItem('meme_mood_boards');
+    localStorage.removeItem('meme_pinboard');
+    setConfirmWipeMode('none');
+    showToast('VAULT & MOOD BOARDS WIPED CLEAN!', 'tertiary');
+  };
+
+  const handleClearBlockedMemes = () => {
+    localStorage.removeItem('reported_memes');
+    setBlockedMemesCount(0);
+    showToast('BLOCKED MEMES LIST RESET!', 'secondary');
+  };
+
+  const handleWipeAllAppData = () => {
+    // 1. Clear viewing history & reactions
+    setTotalMemesViewed(0);
+    setTotalMemesFetched(0);
+    setLikedMemes([]);
+    setMemeReactions({});
+    setMemeHistory([]);
+    setHistoryIndex(-1);
+    setMemeQueue([]);
+    setMultiDropMemes([]);
+    setIsMultiDropView(false);
+    setMeme(null);
+    setScreen('waiting');
+
+    // 2. Clear Vault, Mood Boards, and Pinboard
+    setFavorites([]);
+    setMoodBoards([]);
+    setPinnedMemes([]);
+    setSelectedBoardId(null);
+
+    // 3. Clear Blocked Memes & Reset Streak
+    setBlockedMemesCount(0);
+    setStreak(1);
+
+    // 4. Remove from localStorage (preserve privacy policy consent & pro purchase status)
+    const keysToRemove = [
+      'total_memes_viewed',
+      'total_memes_fetched',
+      'liked_memes',
+      'meme_reactions',
+      'meme_favorites',
+      'meme_mood_boards',
+      'meme_pinboard',
+      'reported_memes',
+      'streak_count',
+      'streak_last_date',
+      ACTIVE_SESSION_STORAGE_KEY,
+      SHARE_HANDOFF_STORAGE_KEY,
+    ];
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+    sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    memeDimensionCache.clear();
+    setConfirmWipeMode('none');
+    showToast('ALL APP HISTORY & DATA DELETED!', 'tertiary');
   };
 
   // --- Emoji Reaction Handlers ---
@@ -643,7 +1450,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       updated = { ...memeReactions, [key]: emoji };
       // Show floating reaction animation
       setFloatingReaction(emoji);
-      setShakeCard(true);
+      if (shakeEffectsEnabled) {
+        setShakeCard(true);
+      }
       setTimeout(() => {
         setFloatingReaction(null);
         setShakeCard(false);
@@ -671,15 +1480,43 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     setTouchDeltaY(delta);
   }, [touchStartY, isTransitioning]);
 
+  // Seamless in-place card advance if user speed-swipes faster than network without ever breaking flow with the loading screen
+  const advanceInlineWithoutLoadingScreen = useCallback(async () => {
+    const nextViewed = totalMemesViewed + 1;
+    void fillPipeline(memeQueueRef.current.length, nextViewed + queueFetchCounter);
+    try {
+      const nextMeme = await fetchValidMeme(nextViewed + 1);
+      setImageFailed(false);
+      setMeme(nextMeme);
+      setScreen('viewing');
+      setTotalMemesViewed(nextViewed);
+      setTotalMemesFetched(Math.max(totalMemesFetched, nextViewed));
+      localStorage.setItem('total_memes_viewed', nextViewed.toString());
+      localStorage.setItem('total_memes_fetched', Math.max(totalMemesFetched, nextViewed).toString());
+      setMemeHistory((prev) => [...prev.slice(-14), nextMeme]);
+      setHistoryIndex(-1);
+      if (nextMeme.id) trackEvent(nextMeme.id, 'view');
+      void maybeShowInterstitial(nextViewed);
+    } catch (err) {
+      console.warn('Inline meme advance fallback error:', err);
+    }
+  }, [totalMemesViewed, totalMemesFetched, queueFetchCounter, fillPipeline, trackEvent]);
+
   const swipeToNext = useCallback(() => {
     setShowReactionPicker(false);
     setShowBoardPicker(false);
 
-    if (memeQueue.length > 0) {
+    const activeQueue = memeQueueRef.current.length > 0 ? memeQueueRef.current : memeQueue;
+    if (activeQueue.length > 0) {
       // INSTANT: Pop from pipeline queue front
-      const [nextMeme, ...remainingQueue] = memeQueue;
+      const [nextMeme, ...remainingQueue] = activeQueue;
+      memeQueueRef.current = remainingQueue;
       setExitDirection('up');
       setIsTransitioning(true);
+
+      const nextViewed = totalMemesViewed + 1;
+      // Trigger next stack fetch immediately if 60%-70% of loaded stack has been viewed
+      recordStackConsumptionAndMaybeRefill(remainingQueue.length, nextViewed + queueFetchCounter);
 
       // Phase 1: Exit animation (300ms)
       setTimeout(() => {
@@ -689,11 +1526,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         setMeme(nextMeme);
         setMemeQueue(remainingQueue);
 
-        const nextViewed = totalMemesViewed + 1;
         setTotalMemesViewed(nextViewed);
-        setTotalMemesFetched(nextViewed);
+        setTotalMemesFetched(Math.max(totalMemesFetched, nextViewed));
         localStorage.setItem('total_memes_viewed', nextViewed.toString());
-        localStorage.setItem('total_memes_fetched', nextViewed.toString());
+        localStorage.setItem('total_memes_fetched', Math.max(totalMemesFetched, nextViewed).toString());
         setMemeHistory(prev => [...prev.slice(-14), nextMeme]);
         setHistoryIndex(-1);
 
@@ -707,14 +1543,22 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         }, 400);
       }, 280);
     } else {
-      // Fallback: Queue empty, do a fresh fetch with loading screen
+      // Keep user in viewing screen without full-screen loader interruption
       setIsTransitioning(true);
-      fetchMeme().then(() => {
+      advanceInlineWithoutLoadingScreen().finally(() => {
         setSwipeDirection(null);
         setIsTransitioning(false);
       });
     }
-  }, [memeQueue, totalMemesViewed]);
+  }, [
+    memeQueue,
+    totalMemesViewed,
+    totalMemesFetched,
+    queueFetchCounter,
+    recordStackConsumptionAndMaybeRefill,
+    advanceInlineWithoutLoadingScreen,
+    trackEvent,
+  ]);
 
   const swipeToPrevious = useCallback(() => {
     if (memeHistory.length === 0) return;
@@ -769,6 +1613,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         currentBlocked.push(meme.url);
         localStorage.setItem('reported_memes', JSON.stringify(currentBlocked));
       }
+      setBlockedMemesCount(currentBlocked.length);
 
       // Remove from favorites if present
       if (favorites.some((f) => f.url === meme.url)) {
@@ -850,11 +1695,46 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
   };
 
   const fetchMeme = async () => {
-    setScreen('loading');
-    setErrorMsg('');
-    setLoadProgress(0);
     setShowReactionPicker(false);
     setShowBoardPicker(false);
+    setErrorMsg('');
+
+    // If we already have pre-fetched memes in the FIFO buffer queue, pop immediately without reloading
+    const currentQueue = memeQueueRef.current.length > 0 ? memeQueueRef.current : memeQueue;
+    if (currentQueue.length > 0) {
+      const [nextMeme, ...remainingQueue] = currentQueue;
+      memeQueueRef.current = remainingQueue;
+      setImageFailed(false);
+      setMeme(nextMeme);
+      setMemeQueue(remainingQueue);
+      setScreen('viewing');
+
+      const nextViewed = totalMemesViewed + 1;
+      setTotalMemesViewed(nextViewed);
+      setTotalMemesFetched(Math.max(totalMemesFetched, nextViewed));
+      localStorage.setItem('total_memes_viewed', nextViewed.toString());
+      localStorage.setItem('total_memes_fetched', Math.max(totalMemesFetched, nextViewed).toString());
+
+      setMemeHistory((prev) => [...prev.slice(-14), nextMeme]);
+      setHistoryIndex(-1);
+
+      if (nextMeme.id) {
+        trackEvent(nextMeme.id, 'view');
+      }
+      void maybeShowInterstitial(nextViewed);
+
+      recordStackConsumptionAndMaybeRefill(remainingQueue.length, nextViewed + queueFetchCounter);
+      return;
+    }
+
+    // If the user is already in 'viewing' mode (e.g. bonus drop or speed-swipe), advance inline without showing full-screen loading terminal
+    if (screen === 'viewing' && meme) {
+      await advanceInlineWithoutLoadingScreen();
+      return;
+    }
+
+    setScreen('loading');
+    setLoadProgress(0);
 
     let progress = 0;
     const interval = setInterval(() => {
@@ -882,6 +1762,11 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         localStorage.setItem('total_memes_viewed', nextViewed.toString());
         localStorage.setItem('total_memes_fetched', nextViewed.toString());
 
+        // Reset stack consumption tracker for the newly initialized stack
+        stackBatchTotalRef.current = STACK_BATCH_SIZE;
+        stackBatchViewedRef.current = 1;
+        fetchSeedCursorRef.current = Math.max(fetchSeedCursorRef.current, nextViewed + 3);
+
         // Add to history
         setMemeHistory(prev => [...prev.slice(-14), finalMeme]);
         setHistoryIndex(-1);
@@ -893,20 +1778,34 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
 
         void maybeShowInterstitial(nextViewed);
 
-        // In background, populate the rest of the 4-card stack and top off the pipeline
+        // In background, stream the initial 4-card stack and fill the full 12-meme rolling FIFO buffer
         (async () => {
           const restResults = await Promise.all([
-            fetchValidMeme(nextViewed + 1).catch(() => null),
-            fetchValidMeme(nextViewed + 2).catch(() => null),
-            fetchValidMeme(nextViewed + 3).catch(() => null),
+            fetchValidMeme(nextViewed + 1)
+              .then((m) => {
+                enqueueMemeToFifo(m);
+                return m;
+              })
+              .catch(() => null),
+            fetchValidMeme(nextViewed + 2)
+              .then((m) => {
+                enqueueMemeToFifo(m);
+                return m;
+              })
+              .catch(() => null),
+            fetchValidMeme(nextViewed + 3)
+              .then((m) => {
+                enqueueMemeToFifo(m);
+                return m;
+              })
+              .catch(() => null),
           ]);
-          const initialQueue = restResults.filter((m): m is Meme => m !== null);
-          if (initialQueue.length > 0) {
-            setMemeQueue(initialQueue);
-            setTotalMemesFetched(nextViewed + initialQueue.length);
-            localStorage.setItem('total_memes_fetched', (nextViewed + initialQueue.length).toString());
+          const initialCount = restResults.filter((m): m is Meme => m !== null).length;
+          if (initialCount > 0) {
+            setTotalMemesFetched(nextViewed + initialCount);
+            localStorage.setItem('total_memes_fetched', (nextViewed + initialCount).toString());
           }
-          fillPipeline(initialQueue.length, nextViewed + initialQueue.length);
+          void fillPipeline(memeQueueRef.current.length, nextViewed + initialCount);
         })();
       }, 150);
     } catch (error) {
@@ -922,40 +1821,105 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     showToast('LINK SECURED TO CLIPBOARD!', 'secondary');
   };
 
-  const shareMeme = async (item: Meme) => {
+  const shareMeme = (item: Meme) => {
+    persistActiveSession(true);
+    setShowReactionPicker(false);
+    setShowBoardPicker(false);
+    setShareTargetMeme(item);
+  };
+
+  const executeNativeShare = async (item: Meme, customShareMessage?: string) => {
+    persistActiveSession(true);
     const displayTitle = item.source === 'Reddit' ? item.title : 'Meme Capsule Drop';
+    const shareMessage = customShareMessage || buildMemeShareMessage(item);
+
     if (window.MemeCapsuleAndroid) {
-      window.MemeCapsuleAndroid.shareImage(item.url, safeFileName(displayTitle), displayTitle);
+      showToast('PREPARING SHARE...', 'secondary');
+      if (window.MemeCapsuleAndroid.shareImageToApp) {
+        window.MemeCapsuleAndroid.shareImageToApp(item.url, safeFileName(displayTitle), shareMessage, '');
+      } else {
+        window.MemeCapsuleAndroid.shareImage(item.url, safeFileName(displayTitle), shareMessage);
+      }
       if (item.id) {
         trackEvent(item.id, 'share');
       }
+      setShareTargetMeme(null);
       return;
     }
 
     try {
       await Share.share({
         title: displayTitle,
-        text: `Check out this Meme Capsule drop: "${displayTitle}"`,
+        text: shareMessage,
         url: item.url,
         dialogTitle: 'SHARE MEME CAPSULE DROP',
       });
       showToast('SHARED SUCCESSFULLY!', 'success');
       trackEvent(item.id || item.url, 'share');
+      setShareTargetMeme(null);
     } catch (error) {
       if (navigator.share) {
         try {
-          await navigator.share({ title: displayTitle, text: displayTitle, url: item.url });
+          await navigator.share({ title: displayTitle, text: shareMessage, url: item.url });
           if (item.id) {
             trackEvent(item.id, 'share');
           }
+          setShareTargetMeme(null);
           return;
         } catch (e) {
-          copyToClipboard(item.url);
+          copyToClipboard(`${shareMessage}\n${item.url}`);
         }
       } else {
-        copyToClipboard(item.url);
+        copyToClipboard(`${shareMessage}\n${item.url}`);
       }
     }
+  };
+
+  const executeAppShare = async (item: Meme, shareMessage: string, targetPackage: string, appName: string) => {
+    persistActiveSession(true);
+    const displayTitle = item.source === 'Reddit' ? item.title : 'Meme Capsule Drop';
+
+    if (window.MemeCapsuleAndroid) {
+      showToast(`SHARING TO ${appName.toUpperCase()}...`, 'secondary');
+      if (window.MemeCapsuleAndroid.shareImageToApp) {
+        window.MemeCapsuleAndroid.shareImageToApp(item.url, safeFileName(displayTitle), shareMessage, targetPackage);
+      } else {
+        window.MemeCapsuleAndroid.shareImage(item.url, safeFileName(displayTitle), shareMessage);
+      }
+      if (item.id) {
+        trackEvent(item.id, 'share');
+      }
+      setShareTargetMeme(null);
+      return;
+    }
+
+    // Web fallbacks for social targets
+    const encodedText = encodeURIComponent(`${shareMessage}\n\n🖼️ ${item.url}`);
+    const encodedUrl = encodeURIComponent(item.url);
+
+    if (appName === 'WhatsApp') {
+      window.open(`https://api.whatsapp.com/send?text=${encodedText}`, '_blank', 'noopener,noreferrer');
+      trackEvent(item.id || item.url, 'share');
+      return;
+    }
+    if (appName === 'Telegram') {
+      window.open(`https://t.me/share/url?url=${encodedUrl}&text=${encodeURIComponent(shareMessage)}`, '_blank', 'noopener,noreferrer');
+      trackEvent(item.id || item.url, 'share');
+      return;
+    }
+    if (appName.startsWith('X')) {
+      window.open(`https://twitter.com/intent/tweet?text=${encodedText}`, '_blank', 'noopener,noreferrer');
+      trackEvent(item.id || item.url, 'share');
+      return;
+    }
+    if (appName === 'Facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodeURIComponent(shareMessage)}`, '_blank', 'noopener,noreferrer');
+      trackEvent(item.id || item.url, 'share');
+      return;
+    }
+
+    // Instagram / Discord on Web: copy message + trigger native share
+    await executeNativeShare(item, shareMessage);
   };
 
   const toggleFavorite = (m: Meme) => {
@@ -963,8 +1927,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
 
     // Vault limit for free users
     if (!exists && !isPro && favorites.length >= FREE_VAULT_LIMIT) {
-      showToast('VAULT FULL! GO PRO FOR UNLIMITED', 'tertiary');
-      setIsProModalOpen(true);
+      showToast('VAULT FULL! REMOVE A MEME TO SAVE ANOTHER.', 'tertiary');
       return;
     }
 
@@ -978,15 +1941,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     setShowReactionPicker(false);
     setShowBoardPicker(false);
 
-    // 1. Process decision feedback and events
-    if (decision === 'keep') {
-      showToast('KEPT! 🔥', 'secondary');
-      if (dismissedMeme.id) trackEvent(dismissedMeme.id, 'keep');
-    } else if (decision === 'skip') {
-      showToast('SKIPPED 💨', 'tertiary');
-      if (dismissedMeme.id) trackEvent(dismissedMeme.id, 'skip');
-    } else if (decision === 'save') {
-      toggleFavorite(dismissedMeme);
+    // Track analytics silently in the background (no noisy toasts, no auto-saving to vault)
+    if (dismissedMeme.id) {
+      trackEvent(dismissedMeme.id, decision === 'keep' ? 'keep' : 'skip');
     }
 
     // 2. Handle multi-drop mode if active
@@ -1003,18 +1960,20 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       }
     }
 
-    // 3. Advance to the next meme in the queue
-    if (memeQueue.length > 0) {
-      const [nextMeme, ...remainingQueue] = memeQueue;
+    // 3. Advance to the next meme in the FIFO queue
+    const activeQueue = memeQueueRef.current.length > 0 ? memeQueueRef.current : memeQueue;
+    if (activeQueue.length > 0) {
+      const [nextMeme, ...remainingQueue] = activeQueue;
+      memeQueueRef.current = remainingQueue;
       setImageFailed(false);
       setMeme(nextMeme);
       setMemeQueue(remainingQueue);
 
       const nextViewed = totalMemesViewed + 1;
       setTotalMemesViewed(nextViewed);
-      setTotalMemesFetched(nextViewed);
+      setTotalMemesFetched(Math.max(totalMemesFetched, nextViewed));
       localStorage.setItem('total_memes_viewed', nextViewed.toString());
-      localStorage.setItem('total_memes_fetched', nextViewed.toString());
+      localStorage.setItem('total_memes_fetched', Math.max(totalMemesFetched, nextViewed).toString());
 
       setMemeHistory((prev) => [...prev.slice(-14), nextMeme]);
       setHistoryIndex(-1);
@@ -1022,33 +1981,49 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       if (nextMeme.id) trackEvent(nextMeme.id, 'view');
       void maybeShowInterstitial(nextViewed);
 
-      // Keep pipeline filled so position 3 always has ready content
-      if (remainingQueue.length < 4) {
-        fillPipeline(remainingQueue.length, nextViewed + queueFetchCounter);
-      }
+      // Trigger fetching the next stack as soon as 60%-70% of the loaded memes have been viewed
+      recordStackConsumptionAndMaybeRefill(remainingQueue.length, nextViewed + queueFetchCounter);
     } else {
-      fetchMeme();
+      void advanceInlineWithoutLoadingScreen();
     }
   }, [
     memeQueue,
     totalMemesViewed,
+    totalMemesFetched,
     queueFetchCounter,
     isMultiDropView,
     multiDropMemes,
     multiDropIndex,
-    fillPipeline,
+    recordStackConsumptionAndMaybeRefill,
+    advanceInlineWithoutLoadingScreen,
     trackEvent,
     toggleFavorite,
     maybeShowInterstitial,
   ]);
 
-  const createMoodBoard = () => {
-    const title = boardTitle.trim() || `CHAOS BOARD ${moodBoards.length + 1}`;
+  const requestBoardCreation = () => {
+    if (!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards)) {
+      setBoardLimitReached(true);
+      setActiveTab('boards');
+      return;
+    }
+    setIsBoardComposerOpen(true);
+  };
+
+  const createMoodBoard = (customTitle?: string, customColor?: MoodBoard['color']) => {
+    if (!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards)) {
+      setIsBoardComposerOpen(false);
+      setBoardLimitReached(true);
+      setActiveTab('boards');
+      return;
+    }
+    const raw = customTitle || boardTitle;
+    const title = raw.trim() || `CHAOS BOARD ${moodBoards.length + 1}`;
     const colors: MoodBoard['color'][] = ['primary', 'secondary', 'tertiary'];
     const board: MoodBoard = {
       id: `board-${Date.now()}`,
       title: title.toUpperCase(),
-      color: colors[moodBoards.length % colors.length],
+      color: customColor || colors[moodBoards.length % colors.length],
       memeUrls: [],
       createdAt: Date.now(),
     };
@@ -1058,42 +2033,59 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     localStorage.setItem('meme_mood_boards', JSON.stringify(updated));
     setBoardTitle('');
     setIsBoardComposerOpen(false);
-    showToast('BOARD BUILT. START PINNING!', 'success');
+    showToast(`BOARD "${board.title}" BUILT!`, 'success');
   };
 
   const toggleMemeOnBoard = (boardId: string, item: Meme) => {
     let isNowPinned = false;
-    const updated = moodBoards.map((board) => {
+    let targetBoardTitle = '';
+
+    const updatedBoards = moodBoards.map((board) => {
       if (board.id !== boardId) return board;
+      targetBoardTitle = board.title;
       const isPinned = board.memeUrls.includes(item.url);
       isNowPinned = !isPinned;
-      return { ...board, memeUrls: isPinned ? board.memeUrls.filter((url) => url !== item.url) : [...board.memeUrls, item.url] };
+      return {
+        ...board,
+        memeUrls: isPinned
+          ? board.memeUrls.filter((url) => url !== item.url)
+          : [...board.memeUrls, item.url],
+      };
     });
 
-    if (isNowPinned && !favorites.some(f => f.url === item.url)) {
-      if (!isPro && favorites.length >= FREE_VAULT_LIMIT) {
-        setIsProModalOpen(true);
-        showToast('VAULT LIMIT REACHED!', 'tertiary');
-        return;
-      }
-      const newFav = { ...item, savedAt: Date.now() };
-      const updatedFavs = [newFav, ...favorites];
-      setFavorites(updatedFavs);
-      localStorage.setItem('meme_favorites', JSON.stringify(updatedFavs));
-    }
+    setMoodBoards(updatedBoards);
+    localStorage.setItem('meme_mood_boards', JSON.stringify(updatedBoards));
 
-    const target = updated.find((board) => board.id === boardId);
-    setMoodBoards(updated);
-    localStorage.setItem('meme_mood_boards', JSON.stringify(updated));
-    showToast(isNowPinned ? 'PINNED TO BOARD!' : 'UNPINNED FROM BOARD', isNowPinned ? 'success' : 'tertiary');
+    // Ensure pinnedMemes is fully synchronized
+    setPinnedMemes((prev) => {
+      let nextPins: Meme[];
+      if (isNowPinned) {
+        if (!prev.some((p) => p.url === item.url)) {
+          nextPins = [{ ...item, savedAt: Date.now() }, ...prev];
+        } else {
+          nextPins = prev;
+        }
+      } else {
+        const stillInOtherBoard = updatedBoards.some((b) => b.memeUrls.includes(item.url));
+        nextPins = stillInOtherBoard ? prev : prev.filter((p) => p.url !== item.url);
+      }
+      localStorage.setItem('meme_pinboard', JSON.stringify(nextPins));
+      return nextPins;
+    });
+
+    showToast(
+      isNowPinned ? `PINNED TO "${targetBoardTitle || 'BOARD'}"!` : `REMOVED FROM "${targetBoardTitle || 'BOARD'}"`,
+      isNowPinned ? 'success' : 'tertiary'
+    );
   };
 
   const removeMoodBoard = (boardId: string) => {
+    const target = moodBoards.find((b) => b.id === boardId);
     const updated = moodBoards.filter((board) => board.id !== boardId);
     setMoodBoards(updated);
-    setSelectedBoardId(updated[0]?.id || null);
+    setSelectedBoardId(null);
     localStorage.setItem('meme_mood_boards', JSON.stringify(updated));
-    showToast('BOARD DEMOLISHED', 'tertiary');
+    showToast(target ? `DEMOLISHED "${target.title}"` : 'BOARD DEMOLISHED', 'tertiary');
   };
 
   const toggleLike = (m: Meme) => {
@@ -1107,43 +2099,109 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     }
   };
 
-  const handlePin = (m: Meme) => {
-    // Read existing pinned memes
-    const existing = JSON.parse(
-      localStorage.getItem('meme_pinboard') ?? '[]'
-    ) as Meme[];
+  const togglePin = (m: Meme) => {
+    const isPinned = pinnedMemes.some((item) => item.url === m.url) || moodBoards.some((b) => b.memeUrls.includes(m.url));
+    if (isPinned) {
+      handleUnpin(m.url, selectedBoardId);
+    } else {
+      handlePin(m);
+    }
+  };
 
-    // Avoid duplicates by checking URL
-    const alreadyPinned = existing.some((item) => item.url === m.url);
-    if (alreadyPinned) {
-      // Show toast: "Already pinned"
-      showToast('Already in moodboard', 'tertiary');
+  const handlePin = (m: Meme) => {
+    if (moodBoards.length === 0) {
+      const firstBoard: MoodBoard = {
+        id: `board-${Date.now()}`,
+        title: 'MAIN VAULT',
+        color: 'secondary',
+        memeUrls: [m.url],
+        createdAt: Date.now(),
+      };
+      const updatedBoards = [firstBoard];
+      setMoodBoards(updatedBoards);
+      setSelectedBoardId(firstBoard.id);
+      localStorage.setItem('meme_mood_boards', JSON.stringify(updatedBoards));
+
+      setPinnedMemes((prev) => {
+        const nextPins = [{ ...m, savedAt: Date.now() }, ...prev.filter((p) => p.url !== m.url)];
+        localStorage.setItem('meme_pinboard', JSON.stringify(nextPins));
+        return nextPins;
+      });
+
+      showToast('PINNED TO MAIN VAULT ✓', 'success');
       return;
     }
 
-    // Add to pinboard
-    const updated = [{ ...m, savedAt: Date.now() }, ...existing];
-    localStorage.setItem('meme_pinboard', JSON.stringify(updated));
-    setPinnedMemes(updated);
+    const targetBoard = selectedBoardId
+      ? moodBoards.find((b) => b.id === selectedBoardId) || moodBoards[0]
+      : moodBoards[0];
 
-    // Visual feedback
-    showToast('Pinned to moodboard ✓', 'success');
+    toggleMemeOnBoard(targetBoard.id, m);
   };
 
-  const handleUnpin = (memeUrl: string) => {
-    const existing = JSON.parse(
-      localStorage.getItem('meme_pinboard') ?? '[]'
-    ) as Meme[];
-    const updated = existing.filter((item) => item.url !== memeUrl);
-    localStorage.setItem('meme_pinboard', JSON.stringify(updated));
-    setPinnedMemes(updated);
-    showToast('Removed from moodboard', 'tertiary');
+  const handleUnpin = (memeUrl: string, fromBoardId?: string | null) => {
+    if (fromBoardId) {
+      let targetTitle = '';
+      const updatedBoards = moodBoards.map((board) => {
+        if (board.id !== fromBoardId) return board;
+        targetTitle = board.title;
+        return {
+          ...board,
+          memeUrls: board.memeUrls.filter((url) => url !== memeUrl),
+        };
+      });
+      setMoodBoards(updatedBoards);
+      localStorage.setItem('meme_mood_boards', JSON.stringify(updatedBoards));
+
+      setPinnedMemes((prev) => {
+        const stillInOtherBoard = updatedBoards.some((b) => b.memeUrls.includes(memeUrl));
+        const nextPins = stillInOtherBoard ? prev : prev.filter((p) => p.url !== memeUrl);
+        localStorage.setItem('meme_pinboard', JSON.stringify(nextPins));
+        return nextPins;
+      });
+
+      showToast(`REMOVED FROM "${targetTitle || 'BOARD'}"`, 'tertiary');
+    } else {
+      const updatedBoards = moodBoards.map((board) => ({
+        ...board,
+        memeUrls: board.memeUrls.filter((url) => url !== memeUrl),
+      }));
+      setMoodBoards(updatedBoards);
+      localStorage.setItem('meme_mood_boards', JSON.stringify(updatedBoards));
+
+      setPinnedMemes((prev) => {
+        const nextPins = prev.filter((p) => p.url !== memeUrl);
+        localStorage.setItem('meme_pinboard', JSON.stringify(nextPins));
+        return nextPins;
+      });
+
+      showToast('REMOVED FROM MOODBOARD', 'tertiary');
+    }
   };
+
+  const getMemeForUrl = useCallback((url: string): Meme => {
+    const fromPinned = pinnedMemes.find((p) => p.url === url);
+    if (fromPinned) return fromPinned;
+    const fromFav = favorites.find((f) => f.url === url);
+    if (fromFav) return fromFav;
+    const fromDeck = deckMemes.find((d) => d.url === url);
+    if (fromDeck) return fromDeck;
+    const fromQueue = memeQueue.find((q) => q.url === url);
+    if (fromQueue) return fromQueue;
+    return {
+      url,
+      title: 'PINNED MEME',
+      author: 'MemeCapsule',
+      source: 'Meme Capsule',
+      savedAt: Date.now(),
+    };
+  }, [pinnedMemes, favorites, deckMemes, memeQueue]);
 
   const downloadMeme = async (item: Meme) => {
     const fileName = safeFileName(item.title);
 
     if (window.MemeCapsuleAndroid) {
+      showToast('DOWNLOADING TO GALLERY...', 'secondary');
       window.MemeCapsuleAndroid.downloadImage(item.url, fileName);
       if (item.id) {
         trackEvent(item.id, 'download');
@@ -1174,104 +2232,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     }
   };
 
-  // --- Purchase Handlers ---
-  const handlePurchasePro = async () => {
-    setIsPurchasing(true);
-    try {
-      if (Capacitor.isNativePlatform()) {
-        const { NativePurchases, PURCHASE_TYPE } = await import('@capgo/native-purchases');
-        const supported = await NativePurchases.isBillingSupported();
-        if (!supported) {
-          showToast('BILLING NOT AVAILABLE ON THIS DEVICE', 'tertiary');
-          setIsPurchasing(false);
-          return;
-        }
-
-        // Fetch products first to verify it exists in Google Play
-        try {
-          const { products } = await NativePurchases.getProducts({
-            productIdentifiers: [IAP_PRODUCT_ID],
-            productType: PURCHASE_TYPE.INAPP,
-          });
-
-          if (!products || products.length === 0) {
-            showToast('PRODUCT NOT FOUND IN PLAY STORE SETUP', 'tertiary');
-            console.error('Product not found in Google Play Console. Check your setup.');
-            setIsPurchasing(false);
-            return;
-          }
-        } catch (fetchErr) {
-          console.error('Failed to fetch product:', fetchErr);
-          showToast('FAILED TO FETCH PRODUCT INFO', 'tertiary');
-          setIsPurchasing(false);
-          return;
-        }
-
-        // Initiate purchase
-        await NativePurchases.purchaseProduct({
-          productIdentifier: IAP_PRODUCT_ID,
-          productType: PURCHASE_TYPE.INAPP,
-          quantity: 1,
-        });
-      }
-      
-      // Purchase succeeded (or running in browser for testing)
-      setIsPro(true);
-      localStorage.setItem('is_pro', 'true');
-      setIsProModalOpen(false);
-      showToast('💎 PRO UNLOCKED! GIGACHAD MODE ACTIVATED!', 'success');
-    } catch (error: any) {
-      console.error('Purchase failed:', error);
-      const errorMsg = error?.message?.toUpperCase() || 'FAILED';
-      
-      // If Google Play throws "You already own this item", we can just restore it automatically!
-      if (errorMsg.includes('ALREADY OWN') || errorMsg.includes('OWNED')) {
-        setIsPro(true);
-        localStorage.setItem('is_pro', 'true');
-        setIsProModalOpen(false);
-        showToast('💎 PRO RESTORED AUTOMATICALLY!', 'success');
-      } else {
-        showToast(`PURCHASE CANCELLED OR ERROR: ${errorMsg.substring(0, 20)}`, 'tertiary');
-      }
-    } finally {
-      setIsPurchasing(false);
-    }
-  };
-
-  const handleRestorePurchase = async () => {
-    setIsPurchasing(true);
-    try {
-      if (Capacitor.isNativePlatform()) {
-        const { NativePurchases } = await import('@capgo/native-purchases');
-        const result = await NativePurchases.restorePurchases();
-        const purchases = (result as any)?.purchases || (result as any)?.items || [];
-        const hasPro = Array.isArray(purchases) && purchases.some(
-          (p: any) => p.productId === IAP_PRODUCT_ID || p.productIdentifier === IAP_PRODUCT_ID
-        );
-        if (hasPro) {
-          setIsPro(true);
-          localStorage.setItem('is_pro', 'true');
-          setIsProModalOpen(false);
-          showToast('💎 PRO RESTORED! WELCOME BACK, KING!', 'success');
-        } else {
-          showToast('NO PREVIOUS PURCHASE FOUND', 'tertiary');
-        }
-      } else {
-        showToast('RESTORE ONLY WORKS ON ANDROID', 'tertiary');
-      }
-    } catch (error) {
-      console.error('Restore failed:', error);
-      showToast('RESTORE FAILED. TRY AGAIN.', 'tertiary');
-    } finally {
-      setIsPurchasing(false);
-    }
-  };
-
   // --- Triple Drop (Pro Feature) ---
   const fetchTripleDrop = async () => {
     if (!isPro) {
       showToast('TRIPLE DROP IS PRO ONLY!', 'tertiary');
-      setIsProModalOpen(true);
       return;
     }
     setScreen('loading');
@@ -1323,9 +2287,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
   };
 
   return (
-    <div className="app-container dark min-h-screen flex flex-col font-body-md overflow-x-hidden selection:bg-primary selection:text-on-primary bg-background text-on-background">
+    <div data-theme={activeTheme} className="app-container dark min-h-screen flex flex-col font-body-md overflow-x-hidden select-none bg-background text-on-background">
       {toastText && (
-        <div className={`fixed top-24 left-1/2 -translate-x-1/2 z-50 px-sm py-2 border-[3px] border-outline shadow-[4px_4px_0px_0px_#000] font-label-md text-xl uppercase ${
+        <div role="status" className={`fixed top-24 left-1/2 -translate-x-1/2 z-[1100] px-sm py-2 border-[3px] border-outline shadow-[4px_4px_0px_0px_#000] font-label-md text-xl uppercase ${
           toastType === 'success' ? 'bg-secondary-container text-on-secondary-container' :
           toastType === 'secondary' ? 'bg-primary text-on-primary' :
           toastType === 'tertiary' ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-surface-container text-on-surface'
@@ -1334,114 +2298,167 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         </div>
       )}
 
+      <PrivacyConsentModal
+        isOpen={isConsentModalOpen}
+        onAgree={handleAgreePolicy}
+        onViewPolicy={() => window.open('https://memecapsule.wtf/privacy', '_blank', 'noopener,noreferrer')}
+      />
+
+      <PrivacyPolicyModal
+        isOpen={isPolicyModalOpen}
+        onClose={() => setIsPolicyModalOpen(false)}
+        onAgree={isConsentModalOpen ? handleAgreePolicy : undefined}
+        showAgreeButton={isConsentModalOpen}
+      />
+
       <OnboardingModal
         isOpen={isOnboardingOpen}
         onClose={() => {
           setIsOnboardingOpen(false);
           localStorage.setItem('has_seen_onboarding', 'true');
         }}
+        onOpenPrivacyPolicy={() => setIsPolicyModalOpen(true)}
       />
 
-      <ProUpgradeModal
-        isOpen={isProModalOpen}
-        onClose={() => setIsProModalOpen(false)}
-        onPurchase={handlePurchasePro}
-        onRestore={handleRestorePurchase}
-        isPurchasing={isPurchasing}
-      />
+      {isStoreOpen && <StoreScreen onClose={closeStore} initialFocus={storeFocus} />}
 
       <ReportModal
         isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        meme={meme}
+        onClose={() => {
+          setIsReportModalOpen(false);
+          setReportTargetMeme(null);
+        }}
+        meme={reportTargetMeme || meme}
         onSubmitReport={handleSubmitReport}
         isSubmitting={isSubmittingReport}
       />
 
-      {/* Unpin Confirmation Modal */}
-      {unpinTargetMeme && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
-          onClick={() => setUnpinTargetMeme(null)}
-        >
-          <div
-            className="bg-surface-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-5 max-w-sm w-full text-center flex flex-col items-center gap-4 animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-20 h-20 border-[2px] border-outline overflow-hidden bg-background">
-              <img
-                src={unpinTargetMeme.url}
-                alt={unpinTargetMeme.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div>
-              <h3 className="font-headline-xl text-[26px] uppercase text-on-surface leading-tight">
-                UNPIN MEME?
-              </h3>
-              <p className="font-label-md text-outline uppercase text-[12px] mt-1">
-                Remove this meme from your moodboard?
-              </p>
-            </div>
-            <div className="flex gap-3 w-full mt-1">
-              <button
-                type="button"
-                onClick={() => setUnpinTargetMeme(null)}
-                className="flex-1 bg-surface-container-high text-on-surface border-[2px] border-background py-2 font-label-xl uppercase text-[14px] active:scale-95 cursor-pointer"
-              >
-                CANCEL
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleUnpin(unpinTargetMeme.url);
-                  setUnpinTargetMeme(null);
-                }}
-                className="flex-1 bg-error-container text-on-error-container border-[2px] border-background py-2 font-label-xl uppercase text-[14px] shadow-[2px_2px_0px_0px_#000] active:scale-95 cursor-pointer"
-              >
-                UNPIN
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RatingModal
+        isOpen={isRatingModalOpen}
+        onClose={handleDeferRating}
+        onRate={handleRateApp}
+        onDefer={handleDeferRating}
+      />
+
+      {/* Redesigned Unpin Confirmation Modal */}
+      <UnpinModal
+        isOpen={Boolean(unpinTargetMeme)}
+        meme={unpinTargetMeme}
+        boardTitle={selectedBoardId ? moodBoards.find((b) => b.id === selectedBoardId)?.title : undefined}
+        onClose={() => setUnpinTargetMeme(null)}
+        onConfirm={() => {
+          if (unpinTargetMeme) {
+            handleUnpin(unpinTargetMeme.url, selectedBoardId);
+            setUnpinTargetMeme(null);
+          }
+        }}
+      />
+
+      {/* Create Mood Board Modal */}
+      <CreateBoardModal
+        isOpen={isBoardComposerOpen}
+        onClose={() => setIsBoardComposerOpen(false)}
+        onCreateBoard={(title, color) => createMoodBoard(title, color)}
+      />
+
+      {/* Neo-Brutalist Share Bottom Sheet Modal + Persistent Ribbon Above Bottom Dock */}
+      <ShareModal
+        isOpen={Boolean(shareTargetMeme)}
+        meme={shareTargetMeme}
+        activeFallbackMeme={meme || favorites[0] || pinnedMemes[0] || null}
+        showRibbon={activeTab !== 'settings'}
+        onOpen={() => {
+          const target = meme || favorites[0] || pinnedMemes[0] || {
+            url: 'https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C3VwSYoOSW__2.jpg',
+            title: 'Meme Capsule Drop',
+            author: 'Meme Capsule Vault',
+            source: 'Meme Capsule',
+          };
+          setShareTargetMeme(target);
+        }}
+        onClose={() => setShareTargetMeme(null)}
+        onShareToApp={(targetMeme, shareMsg, targetPkg, appName) =>
+          executeAppShare(targetMeme, shareMsg, targetPkg, appName)
+        }
+        onNativeShare={(targetMeme, shareMsg) =>
+          executeNativeShare(targetMeme, shareMsg)
+        }
+        onCopySharePayload={() => {
+          if (shareTargetMeme?.id) {
+            trackEvent(shareTargetMeme.id, 'share');
+          }
+        }}
+      />
 
       <header className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)]">
         <div className="flex items-center justify-between w-full max-w-[1200px] mx-auto">
-          <div className="flex items-center shrink-0">
-            <div className="bg-surface-container-low border-[2px] border-outline/50 text-on-surface px-2 py-1 flex items-center gap-1 shadow-[2px_2px_0px_0px_var(--color-outline)] cursor-help" title={`${streak} Day Streak — ${getStreakTitle()}`}>
-              <span className="text-[14px] leading-none">{streak >= 7 ? '🔥' : streak >= 3 ? '⚡' : '🌱'}</span>
-              <span className="font-label-xl text-[12px] uppercase mt-0.5">{streak}</span>
-            </div>
+          {/* Left Slot: Redesigned Neo-Brutalist Settings Button (Leaf Icon Completely Removed, Re-Tap Toggles Settings) */}
+          <div className="w-[84px] flex items-center justify-start shrink-0">
+            <button
+              type="button"
+              onClick={toggleSettings}
+              className="w-[38px] h-[38px] flex items-center justify-center cursor-pointer select-none transition-all duration-100 active:translate-x-[1px] active:translate-y-[1px] active:!shadow-none"
+              style={{
+                backgroundColor: activeTab === 'settings' ? '#A855F7' : '#1c1c1e',
+                border: '2px solid #000000',
+                boxShadow: '2.5px 2.5px 0px #000000',
+                touchAction: 'manipulation',
+              }}
+              title={activeTab === 'settings' ? 'Close App Settings' : 'Open App Settings'}
+              aria-label={activeTab === 'settings' ? 'Close App Settings' : 'Open App Settings'}
+              aria-expanded={activeTab === 'settings'}
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={activeTab === 'settings' ? '#000000' : '#C084FC'}
+                strokeWidth="2.4"
+                strokeLinecap="square"
+                strokeLinejoin="miter"
+              >
+                <circle cx="12" cy="12" r="3.2" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </button>
           </div>
-          <h1 className="font-headline-lg-mobile text-[22px] sm:text-[30px] md:font-headline-xl md:text-[60px] text-primary tracking-tighter leading-none uppercase glitch-text -skew-x-[5deg] text-stroke-yellow neo-shadow-pink text-center cursor-pointer flex-1 mx-2 truncate" onClick={() => { setActiveTab('home'); setScreen('waiting'); setMeme(null); }}>
+
+          {/* Center Slot: Simple, Clean Title (Strictly Centered, No Shadow) */}
+          <h1
+            onClick={() => { setActiveTab('home'); setScreen('waiting'); setMeme(null); }}
+            className="font-headline-lg-mobile text-[22px] sm:text-[26px] md:text-[30px] font-bold text-white tracking-wider leading-none uppercase text-center cursor-pointer flex-1 mx-2 truncate hover:text-primary transition-colors"
+            style={{ textShadow: 'none', WebkitTextStroke: '0px' }}
+          >
             MEME CAPSULE
           </h1>
-          <div className="flex items-center gap-1.5 shrink-0">
+
+            {/* Fixed-width ownership badge balances the header. Store entry lives in Settings. */}
+          <div className="w-[84px] flex items-center justify-end shrink-0">
             {isPro ? (
-              <span className="bg-secondary-container text-on-secondary-container border-[2px] border-background px-2.5 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => openStore({ focus: PRODUCTS.BUNDLE_ULTIMATE })}
+                title="Open Capsule Store"
+                className="bg-secondary-container text-on-secondary-container border-[2px] border-background px-2.5 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-1 cursor-pointer font-bold"
+              >
                 <Crown size={14} /> PRO
-              </span>
+              </button>
             ) : (
               <button
-                onClick={() => setIsProModalOpen(true)}
-                className="bg-secondary-container text-on-secondary-container border-[2px] border-background px-2.5 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1 hover:brightness-110"
+                type="button"
+                onClick={() => openStore({ focus: PRODUCTS.PRO_BUNDLE })}
+                title="Open Capsule Store"
+                className="bg-[#dd0061] text-white border-[2px] border-black px-2.5 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none flex items-center gap-1 cursor-pointer font-bold hover:brightness-110"
               >
-                <Crown size={14} /> GO PRO
+                <Crown size={13} /> GO PRO
               </button>
             )}
-            <button
-              onClick={() => setIsOnboardingOpen(true)}
-              className="bg-tertiary-container text-on-tertiary-container border-[2px] border-background px-2 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
-              title="Replay Onboarding Tour"
-            >
-              <Sparkles size={14} />
-            </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm py-2 gap-2 pb-24">
+      <main className="flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm py-2 gap-2 pb-[calc(88px+max(env(safe-area-inset-bottom,0px),16px))]">
         {activeTab === 'home' && (
           <div className="w-full flex flex-col items-center justify-center flex-grow">
             {screen === 'waiting' && (
@@ -1457,6 +2474,14 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                     <p className="font-headline-lg-mobile text-[28px] text-on-background tracking-tighter uppercase leading-none text-center">TAKE THE RISK.</p>
                     <p className="font-label-xl text-[14px] text-outline uppercase tracking-wider mt-1">ONE TAP. ONE CAPSULE DROP.</p>
                   </div>
+
+                  {/* Drop Mode Selector */}
+                  <DropModeSelector
+                    activeMode={dropMode}
+                    onSelectMode={setDropMode}
+                    onOpenStore={(focus) => openStore({ focus })}
+                    ownedPacks={entitlements.ownedPacks}
+                  />
 
                   {/* HIT ME — the hero button */}
                   <div className="relative w-full flex items-center justify-center mb-6">
@@ -1477,12 +2502,14 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                       <Sparkles size={16} className="animate-spin shrink-0" style={{ animationDuration: '3s' }} />
                       <span className="font-label-xl text-[13px] uppercase tracking-tight">{isPro ? '💎 INSTANT' : 'BONUS DROP'}</span>
                     </button>
-                    <button onClick={fetchTripleDrop} className={`flex-1 border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-tertiary)] py-2.5 px-3 flex items-center justify-center gap-1.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all ${isPro ? 'bg-secondary-container text-on-secondary-container hover:brightness-110' : 'bg-surface-container-low text-outline'}`}>
+                    {isPro && <button onClick={fetchTripleDrop} className={`flex-1 border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-tertiary)] py-2.5 px-3 flex items-center justify-center gap-1.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all ${isPro ? 'bg-secondary-container text-on-secondary-container hover:brightness-110' : 'bg-surface-container-low text-outline'}`}>
                       <Layers size={16} className="shrink-0" />
                       <span className="font-label-xl text-[13px] uppercase tracking-tight">{isPro ? 'TRIPLE 🎰' : '🔒 TRIPLE'}</span>
-                    </button>
+                    </button>}
                   </div>
 
+                  <RewardPacks onUnlock={watchForPack} busy={rewardBusy} adFree={entitlements.adsRemoved} />
+                  {showHomeBanner && <div className="h-[60px]" aria-hidden="true" />}
                 </div>
               </section>
             )}
@@ -1525,13 +2552,22 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
             {screen === 'viewing' && meme && (
               <section className="w-full flex flex-col items-center justify-center flex-grow gap-2 mt-1">
                 {/* 4-Card Stacked Deck Interactive Container */}
-                <div className="w-full max-w-[500px] flex flex-col items-center relative">
+                <div
+                  className="flex flex-col items-center relative transition-all duration-200"
+                  style={{
+                    width: `${canvasDimensions.width}px`,
+                    maxWidth: '92vw',
+                  }}
+                >
                   <MemeStack
                     ref={stackRef}
                     memes={deckMemes}
+                    canvasDimensions={canvasDimensions}
+                    onDimensionsLoaded={handleDimensionsLoaded}
                     onDismiss={handleCardDismiss}
                     isLoading={imageFailed}
                     shakeCard={shakeCard}
+                    activeFxStyle={shakeEffectsEnabled ? activeFx : 'classic'}
                     memeFeedback={memeFeedback}
                     floatingReaction={floatingReaction}
                     onDoubleTap={() => {
@@ -1548,7 +2584,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                     onDownload={downloadMeme}
                     favorites={favorites}
                     onToggleFavorite={toggleFavorite}
-                    onOpenReport={() => setIsReportModalOpen(true)}
+                    onOpenReport={(target) => {
+                      setReportTargetMeme(target || meme);
+                      setIsReportModalOpen(true);
+                    }}
                     memeReactions={memeReactions}
                     onOpenReactionPicker={() => {
                       setShowReactionPicker(!showReactionPicker);
@@ -1590,27 +2629,52 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
 
                   {/* Board Picker Overlay */}
                   {showBoardPicker && moodBoards.length > 0 && meme && (
-                    <div className="absolute left-1/2 -translate-x-1/2 top-4 z-50 flex flex-col gap-1 bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2 py-2 backdrop-blur-md min-w-[200px] max-w-[280px]">
-                      <span className="font-label-xl text-[11px] text-outline uppercase tracking-wider px-1 mb-1">PIN TO BOARD</span>
+                    <div className="absolute left-1/2 -translate-x-1/2 top-4 z-50 flex flex-col gap-1 bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2.5 py-2 backdrop-blur-md min-w-[220px] max-w-[300px]">
+                      <div className="flex items-center justify-between px-1 mb-1 border-b border-outline/30 pb-1">
+                        <span className="font-label-xl text-[11px] text-outline uppercase tracking-wider">PIN TO BOARD</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowBoardPicker(false);
+                            requestBoardCreation();
+                          }}
+                          className="font-label-md text-[10px] text-secondary-container hover:underline uppercase flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <Plus size={11} strokeWidth={3} />
+                          <span>NEW</span>
+                        </button>
+                      </div>
                       {moodBoards.map((board) => {
                         const isPinned = board.memeUrls.includes(meme.url);
                         return (
                           <button
                             key={board.id}
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               toggleMemeOnBoard(board.id, meme);
                               setSelectedBoardId(board.id);
                               setShowBoardPicker(false);
                             }}
-                            className={`flex items-center justify-between gap-2 px-2 py-1.5 transition-all text-left ${
+                            className={`flex items-center justify-between gap-2 px-2.5 py-2 transition-all text-left cursor-pointer ${
                               isPinned
-                                ? 'bg-primary-container/60 border-[2px] border-secondary-container'
-                                : 'border-[2px] border-transparent hover:bg-surface-container-low'
+                                ? 'bg-primary-container/60 border-[2px] border-secondary-container text-on-surface'
+                                : 'border-[2px] border-transparent hover:bg-surface-container-low text-on-surface'
                             }`}
+                            style={{ touchAction: 'manipulation' }}
                           >
-                            <span className="font-label-xl text-[13px] text-on-surface uppercase truncate">{board.title}</span>
-                            {isPinned && <span className="text-[16px] leading-none">✓</span>}
+                            <div className="flex items-center gap-2 truncate">
+                              <span
+                                className="w-2.5 h-2.5 shrink-0 border border-black/40"
+                                style={{ backgroundColor: getBoardHex(board.color) }}
+                              />
+                              <span className="font-label-xl text-[13px] uppercase truncate font-bold">{board.title}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="font-label-md text-[10px] text-outline">({board.memeUrls.length})</span>
+                              {isPinned && <span className="text-[14px] text-secondary-container font-bold leading-none">✓</span>}
+                            </div>
                           </button>
                         );
                       })}
@@ -1625,132 +2689,326 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                   </div>
                 </div>
 
-                {/* Three Compact CTA Buttons Below Canvas */}
-                {meme && (
-                  <div className="w-full max-w-[380px] flex items-center justify-center gap-3 mt-4 px-3">
-                    {/* Like + React (single tap = like, long press = reaction picker) */}
-                    <button
-                      type="button"
-                      onClick={() => { if (meme) toggleLike(meme); }}
-                      onContextMenu={(e) => { e.preventDefault(); setShowReactionPicker(!showReactionPicker); setShowBoardPicker(false); }}
-                      onPointerDown={() => {
-                        likeScaleTimerRef.current = setTimeout(() => {
-                          setIsLikePressing(true);
-                        }, 200);
-                        ctaLongPressTimerRef.current = setTimeout(() => {
-                          setIsLikePressing(false);
+                {/* Four Primary Rectangular CTA Buttons Below Canvas (nav#ctaRow: LIKE -> VAULT -> PIN -> MORE) */}
+                {meme && (() => {
+                  const isLiked = likedMemes.includes(meme.url);
+                  const isSaved = favorites.some((f) => f.url === meme.url);
+                  const isPinned =
+                    pinnedMemes.some((p) => p.url === meme.url) ||
+                    moodBoards.some((b) => b.memeUrls.includes(meme.url));
+
+                  const renderBurstAndInk = (btnKey: 'like' | 'vault' | 'pin' | 'more', accentHex: string) => {
+                    const isCurrentEffect = ctaEffects.key === btnKey && Date.now() - ctaEffects.tick < 600;
+                    return (
+                      <>
+                        <div className="ink-layer">
+                          {isCurrentEffect && (
+                            <span
+                              key={`ink-${ctaEffects.tick}`}
+                              className="ink-ripple"
+                              style={{
+                                width: `${ctaEffects.size}px`,
+                                height: `${ctaEffects.size}px`,
+                                left: `${ctaEffects.x}px`,
+                                top: `${ctaEffects.y}px`,
+                                backgroundColor: `${accentHex}55`,
+                              }}
+                            />
+                          )}
+                        </div>
+                        {isCurrentEffect && (
+                          <div key={`burst-${ctaEffects.tick}`} className="burst-wrapper">
+                            <svg
+                              viewBox="0 0 100 100"
+                              className="w-full h-full animate-burst-ticks"
+                              fill="none"
+                              stroke={accentHex}
+                              strokeWidth="4"
+                              strokeLinecap="square"
+                            >
+                              <line x1="50" y1="2" x2="50" y2="14" />
+                              <line x1="50" y1="86" x2="50" y2="98" />
+                              <line x1="6" y1="24" x2="17" y2="31" />
+                              <line x1="83" y1="69" x2="94" y2="76" />
+                              <line x1="6" y1="76" x2="17" y2="69" />
+                              <line x1="83" y1="31" x2="94" y2="24" />
+                            </svg>
+                          </div>
+                        )}
+                      </>
+                    );
+                  };
+
+                  return (
+                    <nav
+                      id="ctaRow"
+                      className="grid grid-cols-4 gap-2.5 w-full max-w-[356px] mt-3.5 relative z-40 select-none"
+                    >
+                      {/* Dismiss backdrop when #moreMenu popover is open */}
+                      {showMoreMenu && (
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowMoreMenu(false);
+                          }}
+                        />
+                      )}
+
+                      {/* 1. LIKE */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMoreMenu(false);
+                          triggerCtaEffect('like', '#FF2A85', e);
+                          if (meme) toggleLike(meme);
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setShowMoreMenu(false);
                           setShowReactionPicker(!showReactionPicker);
                           setShowBoardPicker(false);
-                        }, 400);
-                      }}
-                      onPointerUp={() => {
-                        if (likeScaleTimerRef.current) { clearTimeout(likeScaleTimerRef.current); likeScaleTimerRef.current = null; }
-                        if (ctaLongPressTimerRef.current) { clearTimeout(ctaLongPressTimerRef.current); ctaLongPressTimerRef.current = null; }
-                        setIsLikePressing(false);
-                      }}
-                      onPointerLeave={() => {
-                        if (likeScaleTimerRef.current) { clearTimeout(likeScaleTimerRef.current); likeScaleTimerRef.current = null; }
-                        if (ctaLongPressTimerRef.current) { clearTimeout(ctaLongPressTimerRef.current); ctaLongPressTimerRef.current = null; }
-                        setIsLikePressing(false);
-                      }}
-                      style={{
-                        flex: 1,
-                        height: '52px',
-                        border: '2px solid #dd0061',
-                        borderRadius: '0px',
-                        background: '#1c1b1b',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px',
-                        boxShadow: '3px 3px 0px #dd0061',
-                        cursor: 'pointer',
-                        color: '#dd0061',
-                        transform: isLikePressing ? 'scale(0.9)' : undefined,
-                        transition: 'transform 0.15s ease',
-                      }}
-                      className="active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
-                    >
-                      <Heart
-                        size={24}
-                        strokeWidth={2.5}
-                        fill={likedMemes.includes(meme.url) ? '#dd0061' : 'none'}
-                        color="#dd0061"
-                      />
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', color: '#dd0061', lineHeight: 1 }}>
-                        LIKE
-                      </span>
-                    </button>
+                        }}
+                        className="mc-cta-btn h-[54px] flex flex-col items-center justify-center gap-1 relative"
+                        style={{
+                          background: isLiked
+                            ? '#FF2A85'
+                            : 'linear-gradient(180deg, #1e1318 0%, #151113 100%)',
+                          borderColor: isLiked ? '#000000' : '#FF2A85',
+                          color: isLiked ? '#000000' : '#FF2A85',
+                        }}
+                      >
+                        {renderBurstAndInk('like', '#FF2A85')}
+                        <div
+                          key={ctaEffects.key === 'like' ? `icon-${ctaEffects.tick}` : 'icon-like'}
+                          className={`relative z-10 flex items-center justify-center ${
+                            ctaEffects.key === 'like' ? 'animate-burst' : ''
+                          }`}
+                        >
+                          <Heart
+                            size={22}
+                            strokeWidth={2.6}
+                            fill={isLiked ? '#000000' : 'none'}
+                            color={isLiked ? '#000000' : '#FF2A85'}
+                          />
+                        </div>
+                        <span
+                          className="relative z-10 font-mono font-bold text-[10px] uppercase tracking-wider leading-none"
+                          style={{ color: isLiked ? '#000000' : '#FF2A85' }}
+                        >
+                          {isLiked ? 'LIKED' : 'LIKE'}
+                        </span>
+                      </button>
 
-                    {/* Vault */}
-                    <button
-                      type="button"
-                      onClick={() => { if (meme) toggleFavorite(meme); }}
-                      style={{
-                        flex: 1,
-                        height: '52px',
-                        border: '2px solid #9b30ff',
-                        borderRadius: '0px',
-                        background: '#1c1b1b',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px',
-                        boxShadow: '3px 3px 0px #9b30ff',
-                        cursor: 'pointer',
-                        color: '#9b30ff',
-                      }}
-                      className="active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
-                    >
-                      <Bookmark
-                        size={24}
-                        strokeWidth={2.5}
-                        fill={favorites.some((f) => f.url === meme.url) ? '#9b30ff' : 'none'}
-                        color="#9b30ff"
-                      />
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', color: '#9b30ff', lineHeight: 1 }}>
-                        VAULT
-                      </span>
-                    </button>
+                      {/* 2. VAULT */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMoreMenu(false);
+                          triggerCtaEffect('vault', '#A855F7', e);
+                          if (meme) toggleFavorite(meme);
+                        }}
+                        className="mc-cta-btn h-[54px] flex flex-col items-center justify-center gap-1 relative"
+                        style={{
+                          background: isSaved
+                            ? '#A855F7'
+                            : 'linear-gradient(180deg, #1b1324 0%, #141119 100%)',
+                          borderColor: isSaved ? '#000000' : '#A855F7',
+                          color: isSaved ? '#000000' : '#C084FC',
+                        }}
+                      >
+                        {renderBurstAndInk('vault', '#A855F7')}
+                        <div
+                          key={ctaEffects.key === 'vault' ? `icon-${ctaEffects.tick}` : 'icon-vault'}
+                          className={`relative z-10 flex items-center justify-center ${
+                            ctaEffects.key === 'vault' ? 'animate-burst' : ''
+                          }`}
+                        >
+                          <Bookmark
+                            size={22}
+                            strokeWidth={2.6}
+                            fill={isSaved ? '#000000' : 'none'}
+                            color={isSaved ? '#000000' : '#C084FC'}
+                          />
+                        </div>
+                        <span
+                          className="relative z-10 font-mono font-bold text-[10px] uppercase tracking-wider leading-none"
+                          style={{ color: isSaved ? '#000000' : '#C084FC' }}
+                        >
+                          {isSaved ? 'SAVED' : 'VAULT'}
+                        </span>
+                      </button>
 
-                    {/* Pin */}
-                    <button
-                      type="button"
-                      onClick={() => { if (meme) handlePin(meme); }}
-                      style={{
-                        flex: 1,
-                        height: '52px',
-                        border: '2px solid #f4c300',
-                        borderRadius: '0px',
-                        background: '#1c1b1b',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px',
-                        boxShadow: '3px 3px 0px #f4c300',
-                        cursor: 'pointer',
-                        color: '#f4c300',
-                      }}
-                      className="active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all"
-                    >
-                      <MapPin
-                        size={24}
-                        strokeWidth={2.5}
-                        fill={pinnedMemes.some((p) => p.url === meme.url) ? '#f4c300' : 'none'}
-                        color="#f4c300"
-                      />
-                      <span style={{ fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '10px', textTransform: 'uppercase', color: '#f4c300', lineHeight: 1 }}>
-                        PIN
-                      </span>
-                    </button>
-                  </div>
-                )}
-                  {/* Multi-Drop Gallery Navigation (if triple drop active) */}
-                  {isMultiDropView && multiDropMemes.length > 1 && (
-                    <div className="w-full max-w-[380px] bg-surface-container-low border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-primary-container)] p-2 flex items-center justify-between mt-2">
+                      {/* 3. PIN */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowMoreMenu(false);
+                          triggerCtaEffect('pin', '#FACC15', e);
+                          if (moodBoards.length > 1) {
+                            setShowBoardPicker(!showBoardPicker);
+                            setShowReactionPicker(false);
+                          } else if (meme) {
+                            togglePin(meme);
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setShowMoreMenu(false);
+                          setShowBoardPicker(!showBoardPicker);
+                          setShowReactionPicker(false);
+                        }}
+                        className="mc-cta-btn h-[54px] flex flex-col items-center justify-center gap-1 relative"
+                        style={{
+                          background: isPinned
+                            ? '#FACC15'
+                            : 'linear-gradient(180deg, #231e12 0%, #171510 100%)',
+                          borderColor: isPinned ? '#000000' : '#FACC15',
+                          color: isPinned ? '#000000' : '#FACC15',
+                        }}
+                      >
+                        {renderBurstAndInk('pin', '#FACC15')}
+                        <div
+                          key={ctaEffects.key === 'pin' ? `icon-${ctaEffects.tick}` : 'icon-pin'}
+                          className={`relative z-10 flex items-center justify-center ${
+                            ctaEffects.key === 'pin' ? 'animate-burst' : ''
+                          }`}
+                        >
+                          <MapPin
+                            size={22}
+                            strokeWidth={2.6}
+                            fill={isPinned ? '#000000' : 'none'}
+                            color={isPinned ? '#000000' : '#FACC15'}
+                          />
+                        </div>
+                        <span
+                          className="relative z-10 font-mono font-bold text-[10px] uppercase tracking-wider leading-none"
+                          style={{ color: isPinned ? '#000000' : '#FACC15' }}
+                        >
+                          {isPinned ? 'PINNED' : 'PIN'}
+                        </span>
+                      </button>
+
+                      {/* 4. MORE (⋮) + Anchored Secondary Popover Menu (#moreMenu: SHARE, DOWNLOAD, REPORT) */}
+                      <div className="relative flex">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            triggerCtaEffect('more', '#00E5FF', e);
+                            setShowMoreMenu((prev) => !prev);
+                            setShowReactionPicker(false);
+                            setShowBoardPicker(false);
+                          }}
+                          className="mc-cta-btn h-[54px] w-full flex flex-col items-center justify-center gap-1 relative"
+                          style={{
+                            background: showMoreMenu
+                              ? '#00E5FF'
+                              : 'linear-gradient(180deg, #111a1f 0%, #0f1418 100%)',
+                            borderColor: showMoreMenu ? '#000000' : '#00E5FF',
+                            color: showMoreMenu ? '#000000' : '#00E5FF',
+                          }}
+                          aria-expanded={showMoreMenu}
+                          aria-label="More Options"
+                        >
+                          {renderBurstAndInk('more', '#00E5FF')}
+                          <div
+                            key={ctaEffects.key === 'more' ? `icon-${ctaEffects.tick}` : 'icon-more'}
+                            className={`relative z-10 flex items-center justify-center ${
+                              ctaEffects.key === 'more' ? 'animate-burst' : ''
+                            }`}
+                          >
+                            <MoreVertical
+                              size={22}
+                              strokeWidth={2.8}
+                              color={showMoreMenu ? '#000000' : '#00E5FF'}
+                            />
+                          </div>
+                          <span
+                            className="relative z-10 font-mono font-bold text-[10px] uppercase tracking-wider leading-none"
+                            style={{ color: showMoreMenu ? '#000000' : '#00E5FF' }}
+                          >
+                            MORE
+                          </span>
+                        </button>
+
+                        {/* Secondary Popover Menu (#moreMenu) */}
+                        {showMoreMenu && (
+                          <div
+                            id="moreMenu"
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 bottom-full mb-3 w-48 bg-white border-4 border-black shadow-[4px_4px_0px_#000000] z-50 flex flex-col divide-y-4 divide-black"
+                          >
+                            <button type="button" disabled={rewardBusy || isInAdFreeWindow() || isPro}
+                              onClick={() => { setShowMoreMenu(false); void watchForAdFree(); }}
+                              className="w-full px-3.5 py-3 bg-[#131313] text-[#f4c300] text-left font-label-xl disabled:opacity-60">
+                              <span className="block">⚡ WATCH AD</span>
+                              <span className="text-[11px]">{isInAdFreeWindow() || isPro ? 'AD-FREE ACTIVE ✓' : '30 MIN AD-FREE'}</span>
+                            </button>
+                            {/* 1. SHARE (#A855F7) */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowMoreMenu(false);
+                                if (meme) shareMeme(meme);
+                              }}
+                              className="w-full flex items-center gap-3 px-3.5 py-3 bg-[#A855F7] hover:brightness-105 active:brightness-95 text-black font-mono font-bold text-[13px] uppercase tracking-wider cursor-pointer text-left transition-all"
+                              style={{ touchAction: 'manipulation' }}
+                            >
+                              <Share2 size={17} strokeWidth={2.6} color="#000000" className="shrink-0" />
+                              <span>SHARE</span>
+                            </button>
+
+                            {/* 2. DOWNLOAD (#FACC15) */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowMoreMenu(false);
+                                if (meme) downloadMeme(meme);
+                              }}
+                              className="w-full flex items-center gap-3 px-3.5 py-3 bg-[#FACC15] hover:brightness-105 active:brightness-95 text-black font-mono font-bold text-[13px] uppercase tracking-wider cursor-pointer text-left transition-all"
+                              style={{ touchAction: 'manipulation' }}
+                            >
+                              <Download size={17} strokeWidth={2.6} color="#000000" className="shrink-0" />
+                              <span>DOWNLOAD</span>
+                            </button>
+
+                            {/* 3. REPORT (#FF2A85) */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowMoreMenu(false);
+                                setReportTargetMeme(meme);
+                                setIsReportModalOpen(true);
+                              }}
+                              className="w-full flex items-center gap-3 px-3.5 py-3 bg-[#FF2A85] hover:brightness-105 active:brightness-95 text-black font-mono font-bold text-[13px] uppercase tracking-wider cursor-pointer text-left transition-all"
+                              style={{ touchAction: 'manipulation' }}
+                            >
+                              <Flag size={17} strokeWidth={2.6} color="#000000" className="shrink-0" />
+                              <span>REPORT</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </nav>
+                  );
+                })()}
+
+                {/* Multi-Drop Gallery Navigation (if triple drop active) */}
+                {isMultiDropView && multiDropMemes.length > 1 && (
+                  <div
+                    className="w-full bg-surface-container-low border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-primary-container)] p-2 flex items-center justify-between mt-2 select-none transition-all duration-200"
+                    style={{
+                      width: `${canvasDimensions.width}px`,
+                      maxWidth: '92vw',
+                    }}
+                  >
                       <button
                         onClick={() => {
                           const newIdx = Math.max(0, multiDropIndex - 1);
@@ -1856,124 +3114,765 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
 
         {activeTab === 'boards' && (
           <section className="w-full max-w-[900px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">
-            <div className="flex items-end justify-between gap-sm border-b-[3px] border-outline pb-sm">
-              <div>
-                <span className="font-label-md text-[13px] text-secondary-container uppercase">YOUR PERSONAL ARCHIVE</span>
-                <h2 className="font-headline-xl text-[42px] text-primary tracking-tighter uppercase leading-none skew-x-[-3deg]">MOOD BOARD</h2>
-              </div>
-              <span className="font-label-xl text-[14px] text-outline uppercase">
-                {pinnedMemes.length} {pinnedMemes.length === 1 ? 'PIN' : 'PINS'}
-              </span>
-            </div>
-
-            {pinnedMemes.length === 0 ? (
-              <div className="bg-surface-container border-[4px] border-dashed border-primary-container shadow-[6px_6px_0px_0px_var(--color-secondary-container)] py-xl px-md text-center flex flex-col items-center gap-sm">
-                <LayoutGrid size={58} className="text-primary" />
-                <h3 className="font-headline-xl text-[32px] uppercase text-on-surface leading-none">NO PINS YET.</h3>
-                <p className="font-label-md text-outline uppercase max-w-[380px]">
-                  Collect the memes that define a mood, a phase, or a very specific 3 AM thought. Tap the PIN button on any meme to save it here.
-                </p>
+            {/* Header with Title, Pins Counter and "+ NEW BOARD" Action */}
+            <div className="flex flex-col gap-3 border-b-[3px] border-outline pb-sm">
+              <div className="flex items-end justify-between gap-sm">
+                <div>
+                  <span className="font-label-md text-[13px] text-secondary-container uppercase">YOUR PERSONAL ARCHIVE</span>
+                  <h2 className="font-headline-xl text-[34px] sm:text-[42px] text-primary tracking-tighter uppercase leading-none skew-x-[-3deg]">
+                    MOOD BOARDS
+                  </h2>
+                </div>
                 <button
-                  onClick={() => setActiveTab('home')}
-                  className="bg-primary text-on-primary border-[3px] border-background px-5 py-2 font-label-xl uppercase shadow-[3px_3px_0px_0px_var(--color-tertiary)] active:translate-x-1 active:translate-y-1 active:shadow-none cursor-pointer"
+                  type="button"
+                  onClick={requestBoardCreation}
+                  className="bg-secondary-container text-on-secondary-container border-[2px] border-background px-3.5 py-1.5 font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:brightness-110 transition-all flex items-center gap-1.5 cursor-pointer font-bold shrink-0"
+                  style={{ touchAction: 'manipulation' }}
                 >
-                  FIND MEMES
+                  <Plus size={16} strokeWidth={3} />
+                  <span>NEW BOARD</span>
                 </button>
               </div>
-            ) : (
-              <div className="columns-2 sm:columns-3 gap-sm">
-                {pinnedMemes.map((item) => (
-                  <article
-                    key={item.url}
-                    className="break-inside-avoid mb-sm bg-surface-container-low border-[3px] border-outline shadow-[3px_3px_0px_0px_#000] p-1.5 relative group select-none cursor-pointer transition-transform active:scale-[0.98]"
-                    title="Long press to unpin"
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setUnpinTargetMeme(item);
-                    }}
-                    onPointerDown={() => {
-                      unpinTimerRef.current = setTimeout(() => {
-                        setUnpinTargetMeme(item);
-                      }, 400);
-                    }}
-                    onPointerUp={() => {
-                      if (unpinTimerRef.current) {
-                        clearTimeout(unpinTimerRef.current);
-                        unpinTimerRef.current = null;
-                      }
-                    }}
-                    onPointerLeave={() => {
-                      if (unpinTimerRef.current) {
-                        clearTimeout(unpinTimerRef.current);
-                        unpinTimerRef.current = null;
-                      }
-                    }}
-                    onPointerCancel={() => {
-                      if (unpinTimerRef.current) {
-                        clearTimeout(unpinTimerRef.current);
-                        unpinTimerRef.current = null;
-                      }
-                    }}
-                  >
-                    <div className="relative overflow-hidden">
-                      <img
-                        src={item.url}
-                        alt={item.title}
-                        className="w-full max-h-[260px] object-cover border-[2px] border-background pointer-events-none"
-                        loading="lazy"
+
+              {/* Mood Board Selector Tabs */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {(() => {
+                  const totalUniquePins = Math.max(pinnedMemes.length, new Set(moodBoards.flatMap((b) => b.memeUrls)).size);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBoardId(null)}
+                      className={`px-3 py-1.5 border-[2px] font-label-xl text-[12px] uppercase whitespace-nowrap transition-all cursor-pointer ${
+                        selectedBoardId === null
+                          ? 'bg-primary text-on-primary border-background shadow-[2px_2px_0px_0px_var(--color-secondary-container)]'
+                          : 'bg-surface-container-high text-outline border-outline/30 hover:text-on-surface'
+                      }`}
+                      style={{ touchAction: 'manipulation' }}
+                    >
+                      ALL PINS ({totalUniquePins})
+                    </button>
+                  );
+                })()}
+                {moodBoards.map((b) => {
+                  const isSelected = selectedBoardId === b.id;
+                  const hex = getBoardHex(b.color);
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBoardId(b.id)}
+                      className={`px-3 py-1.5 border-[2px] font-label-xl text-[12px] uppercase whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+                        isSelected
+                          ? 'border-background shadow-[2px_2px_0px_0px_#000] font-bold text-black'
+                          : 'bg-surface-container-high text-outline border-outline/30 hover:text-on-surface'
+                      }`}
+                      style={{
+                        touchAction: 'manipulation',
+                        backgroundColor: isSelected ? hex : undefined,
+                      }}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 shrink-0 border border-black/50"
+                        style={{ backgroundColor: hex }}
                       />
+                      <span>{b.title}</span>
+                      <span className="opacity-75 text-[10px]">({b.memeUrls.length})</span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={requestBoardCreation}
+                  className="px-2.5 py-1.5 border-[2px] border-dashed border-outline/60 text-outline hover:text-secondary-container hover:border-secondary-container font-label-xl text-[12px] uppercase whitespace-nowrap transition-all flex items-center gap-1 cursor-pointer"
+                  style={{ touchAction: 'manipulation' }}
+                  title="Create New Board"
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  <span>ADD</span>
+                </button>
+              </div>
+            </div>
+
+            {!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards) && <div className="p-3 bg-surface-container border-2 border-secondary-container shadow-[4px_4px_0_#000] font-label-md">
+              {boardLimitReached && <div className="mb-3">
+                <p className="font-headline-lg text-[16px] text-[#f4c300] uppercase mb-1.5">
+                  BOARD LIMIT REACHED (3/3) - GET BOARD BOSS FOR UNLIMITED BOARDS
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openStore({ focus: PRODUCTS.UNLIMITED_BOARDS })}
+                  className="bg-secondary-container text-black px-4 py-2 border-2 border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer font-bold"
+                >
+                  UNLOCK UNLIMITED BOARDS
+                </button>
+              </div>}
+              <button disabled={rewardBusy} onClick={() => void watchForBoard()} className="p-2 bg-primary-container border-2 border-black text-white disabled:opacity-50 font-label-xl text-[12px] uppercase cursor-pointer">{entitlements.adsRemoved ? 'CLAIM +1 SESSION SLOT' : '🔒 WATCH AD FOR +1 SLOT'}</button>
+              <p className="text-xs mt-2 text-outline">Extra creation slots last this session. Your saved boards stay.</p>
+            </div>}
+
+            {/* Board Content Section */}
+            {(() => {
+              const currentBoard = selectedBoardId ? moodBoards.find((b) => b.id === selectedBoardId) : null;
+              const displayMemes: Meme[] = currentBoard
+                ? currentBoard.memeUrls.map((url) => getMemeForUrl(url))
+                : (pinnedMemes.length > 0
+                    ? pinnedMemes
+                    : Array.from(new Set(moodBoards.flatMap((b) => b.memeUrls))).map((url) => getMemeForUrl(url)));
+
+              return (
+                <>
+                  {currentBoard && (
+                    <div
+                      className="flex items-center justify-between bg-surface-container border-[2px] border-outline p-2.5 shadow-[2px_2px_0px_0px_#000]"
+                      style={{ borderLeftColor: getBoardHex(currentBoard.color), borderLeftWidth: '5px' }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 border border-background shrink-0"
+                          style={{ backgroundColor: getBoardHex(currentBoard.color) }}
+                        />
+                        <span className="font-label-xl text-[14px] text-on-surface uppercase font-bold tracking-wide">
+                          {currentBoard.title}
+                        </span>
+                        <span className="font-label-md text-[11px] text-outline uppercase">
+                          • {displayMemes.length} {displayMemes.length === 1 ? 'MEME' : 'MEMES'}
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUnpinTargetMeme(item);
-                        }}
-                        title="Unpin meme"
-                        className="absolute right-2 top-2 bg-tertiary-container text-on-tertiary-container border-[2px] border-background p-1 opacity-90 hover:opacity-100 active:scale-90 transition-all shadow-[1px_1px_0px_0px_#000] cursor-pointer"
+                        onClick={() => removeMoodBoard(currentBoard.id)}
+                        className="text-outline hover:text-error text-[11px] font-label-xl uppercase flex items-center gap-1 transition-colors px-2 py-1 border border-outline/30 hover:border-error cursor-pointer"
+                        title="Delete this mood board"
                       >
-                        <X size={14} />
+                        <Trash2 size={13} />
+                        <span>DELETE BOARD</span>
                       </button>
                     </div>
-                    <div className="flex items-center justify-between pt-1">
-                      <p className="font-label-md text-[11px] text-on-surface uppercase leading-tight truncate flex-1 pr-1" title={item.source === 'Reddit' ? item.title : 'MEME CAPSULE DROP'}>
-                        {item.source === 'Reddit' ? item.title : 'MEME CAPSULE DROP'}
+                  )}
+
+                  {displayMemes.length === 0 ? (
+                    <div className="bg-surface-container border-[4px] border-dashed border-primary-container shadow-[6px_6px_0px_0px_var(--color-secondary-container)] py-xl px-md text-center flex flex-col items-center gap-sm">
+                      <LayoutGrid size={58} className="text-primary" />
+                      <h3 className="font-headline-xl text-[28px] sm:text-[32px] uppercase text-on-surface leading-none">
+                        {currentBoard ? `"${currentBoard.title}" IS EMPTY.` : 'NO PINS YET.'}
+                      </h3>
+                      <p className="font-label-md text-outline uppercase max-w-[380px]">
+                        {currentBoard
+                          ? 'Tap the PIN button on any meme in your feed to add it to this board.'
+                          : 'Collect the memes that define a mood, a phase, or a very specific 3 AM thought. Tap the PIN button on any meme to save it here.'}
                       </p>
-                      <div className="flex items-center gap-1">
+                      <div className="flex flex-wrap items-center justify-center gap-3 mt-1">
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); downloadMeme(item); }}
-                          title="Download"
-                          className="text-outline hover:text-primary transition-colors p-0.5 cursor-pointer"
+                          onClick={() => setActiveTab('home')}
+                          className="bg-primary text-on-primary border-[3px] border-background px-5 py-2 font-label-xl uppercase shadow-[3px_3px_0px_0px_var(--color-tertiary)] active:translate-x-1 active:translate-y-1 active:shadow-none cursor-pointer"
                         >
-                          <Download size={14} />
+                          FIND MEMES
                         </button>
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); shareMeme(item); }}
-                          title="Share"
-                          className="text-outline hover:text-secondary transition-colors p-0.5 cursor-pointer"
+                          onClick={requestBoardCreation}
+                          className="bg-secondary-container text-on-secondary-container border-[3px] border-background px-5 py-2 font-label-xl uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-1 active:translate-y-1 active:shadow-none cursor-pointer font-bold"
                         >
-                          <Share2 size={14} />
+                          + CREATE BOARD
                         </button>
                       </div>
                     </div>
-                  </article>
-                ))}
+                  ) : (
+                    <div className="columns-2 sm:columns-3 gap-sm pb-12">
+                      {displayMemes.map((item) => {
+                        const displayTitle = item.source === 'Reddit' && item.title ? item.title : 'MEME CAPSULE DROP';
+                        return (
+                          <article
+                            key={item.url}
+                            className="break-inside-avoid mb-sm bg-surface-container-low border-[3px] border-outline shadow-[3px_3px_0px_0px_#000] p-1.5 relative group select-none cursor-pointer transition-transform active:scale-[0.98]"
+                            title="Long press to unpin"
+                            style={{ touchAction: 'pan-y' }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setUnpinTargetMeme(item);
+                            }}
+                            onPointerDown={() => {
+                              unpinTimerRef.current = setTimeout(() => {
+                                setUnpinTargetMeme(item);
+                              }, 500);
+                            }}
+                            onPointerMove={() => {
+                              if (unpinTimerRef.current) {
+                                clearTimeout(unpinTimerRef.current);
+                                unpinTimerRef.current = null;
+                              }
+                            }}
+                            onPointerUp={() => {
+                              if (unpinTimerRef.current) {
+                                clearTimeout(unpinTimerRef.current);
+                                unpinTimerRef.current = null;
+                              }
+                            }}
+                            onPointerLeave={() => {
+                              if (unpinTimerRef.current) {
+                                clearTimeout(unpinTimerRef.current);
+                                unpinTimerRef.current = null;
+                              }
+                            }}
+                            onPointerCancel={() => {
+                              if (unpinTimerRef.current) {
+                                clearTimeout(unpinTimerRef.current);
+                                unpinTimerRef.current = null;
+                              }
+                            }}
+                          >
+                            <div className="relative overflow-hidden">
+                              <img
+                                src={item.url}
+                                alt={displayTitle}
+                                className="w-full max-h-[260px] object-cover border-[2px] border-background pointer-events-none"
+                                loading="lazy"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setUnpinTargetMeme(item);
+                                }}
+                                onPointerDown={(e) => e.stopPropagation()}
+                                title="Unpin meme"
+                                className="absolute right-2 top-2 bg-tertiary-container text-on-tertiary-container border-[2px] border-background w-7 h-7 flex items-center justify-center opacity-95 hover:opacity-100 active:scale-90 transition-all shadow-[2px_2px_0px_0px_#000] cursor-pointer"
+                                style={{ touchAction: 'manipulation' }}
+                              >
+                                <X size={16} strokeWidth={2.5} />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between pt-1">
+                              <p className="font-label-md text-[11px] text-on-surface uppercase leading-tight truncate flex-1 pr-1" title={displayTitle}>
+                                {displayTitle}
+                              </p>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); downloadMeme(item); }}
+                                  title="Download"
+                                  className="text-outline hover:text-primary transition-colors p-0.5 cursor-pointer"
+                                >
+                                  <Download size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); shareMeme(item); }}
+                                  title="Share"
+                                  className="text-outline hover:text-secondary transition-colors p-0.5 cursor-pointer"
+                                >
+                                  <Share2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </section>
+        )}
+
+        {activeTab === 'settings' && (
+          <section className="w-full max-w-[600px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200 pb-6 relative z-30">
+            {/* Backdrop Tap-to-Dismiss Outside Settings Panel */}
+            <div
+              className="fixed inset-0 bg-black/55 z-20"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeSettings();
+              }}
+              aria-hidden="true"
+            />
+
+            {/* Settings Header Banner */}
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative z-30 bg-surface-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-md flex flex-col gap-md"
+            >
+              <div className="border-b-[3px] border-outline pb-sm flex items-center justify-between gap-sm">
+                <div>
+                  <span className="font-label-md text-[12px] text-secondary-container uppercase tracking-widest block">
+                    SYSTEM CONTROL & PRIVACY
+                  </span>
+                  <h2 className="font-headline-xl text-[36px] sm:text-[42px] text-white tracking-tighter uppercase leading-none skew-x-[-3deg]">
+                    APP SETTINGS
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeSettings();
+                  }}
+                  className="w-[42px] h-[42px] bg-[#A855F7] hover:bg-[#FF2A85] active:bg-[#FF2A85] border-[2px] border-black shadow-[2px_2px_0px_0px_#000000] active:translate-x-[1px] active:translate-y-[1px] active:!shadow-none flex items-center justify-center shrink-0 cursor-pointer transition-all select-none"
+                  style={{ touchAction: 'manipulation' }}
+                  title="Close App Settings"
+                  aria-label="Close App Settings"
+                >
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#000000"
+                    strokeWidth="3"
+                    strokeLinecap="square"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
               </div>
-            )}
+
+              {/* 1. Local Footprint & Telemetry Summary */}
+              <div className="flex flex-col gap-2">
+                <span className="font-label-xl text-[13px] text-outline uppercase tracking-wider">
+                  YOUR LOCAL DEVICE FOOTPRINT
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
+                    <span className="block font-label-md text-[10px] text-outline uppercase">Viewed History</span>
+                    <span className="block font-headline-xl text-[26px] text-primary uppercase leading-tight">{totalMemesViewed}</span>
+                  </div>
+                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
+                    <span className="block font-label-md text-[10px] text-outline uppercase">Vault Saved</span>
+                    <span className="block font-headline-xl text-[26px] text-secondary-container uppercase leading-tight">
+                      {favorites.length}{!isPro ? `/${FREE_VAULT_LIMIT}` : ''}
+                    </span>
+                  </div>
+                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
+                    <span className="block font-label-md text-[10px] text-outline uppercase">Mood Boards</span>
+                    <span className="block font-headline-xl text-[26px] text-tertiary uppercase leading-tight">{moodBoards.length}</span>
+                  </div>
+                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
+                    <span className="block font-label-md text-[10px] text-outline uppercase">Blocked Memes</span>
+                    <span className="block font-headline-xl text-[26px] text-white uppercase leading-tight">{blockedMemesCount}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Data & Past History Deletion Center */}
+              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-label-xl text-[14px] text-tertiary uppercase tracking-wider flex items-center gap-1.5">
+                    <Trash2 size={16} />
+                    <span>HISTORY & DATA ERASURE</span>
+                  </span>
+                  <span className="font-label-md text-[10px] text-outline uppercase">100% ON-DEVICE</span>
+                </div>
+
+                {/* Clear Past Viewing History Only */}
+                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-[3px_3px_0px_0px_#000]">
+                  <div className="flex flex-col">
+                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                      CLEAR PAST VIEWING HISTORY & STATS
+                    </span>
+                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
+                      Resets viewed/fetched counters ({totalMemesViewed}), liked memes ({likedMemes.length}), reactions, and swipe history while keeping your Vault & Mood Boards safe.
+                    </span>
+                  </div>
+                  {confirmWipeMode === 'history' ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleClearViewHistory}
+                        className="bg-[#ff2a2a] text-white border-[2px] border-black px-3 py-1.5 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                      >
+                        CONFIRM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmWipeMode('none')}
+                        className="bg-surface-container-high text-white border-[2px] border-outline px-2.5 py-1.5 font-label-xl text-[12px] uppercase cursor-pointer"
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmWipeMode('history')}
+                      className="bg-surface-container-high hover:bg-primary text-white border-[2px] border-outline px-3.5 py-2 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0 cursor-pointer flex items-center gap-1.5 justify-center"
+                    >
+                      <RotateCcw size={14} />
+                      <span>CLEAR HISTORY</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Clear Saved Vault & Mood Boards */}
+                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-[3px_3px_0px_0px_#000]">
+                  <div className="flex flex-col">
+                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                      EMPTY MEME VAULT & MOOD BOARDS
+                    </span>
+                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
+                      Removes all {favorites.length} saved Vault memes and {moodBoards.length} custom Mood Boards from local storage.
+                    </span>
+                  </div>
+                  {confirmWipeMode === 'vault' ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleClearVaultAndBoards}
+                        className="bg-[#ff2a2a] text-white border-[2px] border-black px-3 py-1.5 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                      >
+                        CONFIRM
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmWipeMode('none')}
+                        className="bg-surface-container-high text-white border-[2px] border-outline px-2.5 py-1.5 font-label-xl text-[12px] uppercase cursor-pointer"
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmWipeMode('vault')}
+                      className="bg-surface-container-high hover:bg-tertiary text-white border-[2px] border-outline px-3.5 py-2 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0 cursor-pointer flex items-center gap-1.5 justify-center"
+                    >
+                      <Trash2 size={14} />
+                      <span>EMPTY VAULT</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Reset Blocked Memes List */}
+                {blockedMemesCount > 0 && (
+                  <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-[3px_3px_0px_0px_#000]">
+                    <div className="flex flex-col">
+                      <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                        UNBLOCK REPORTED MEMES ({blockedMemesCount})
+                      </span>
+                      <span className="font-sans text-[12px] text-neutral-400 leading-snug">
+                        Clears your local blocklist so previously hidden memes can appear again.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleClearBlockedMemes}
+                      className="bg-surface-container-high hover:bg-secondary-container hover:text-black text-white border-[2px] border-outline px-3.5 py-2 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0 cursor-pointer"
+                    >
+                      UNBLOCK ALL
+                    </button>
+                  </div>
+                )}
+
+                {/* Master Delete All App History & Data Button */}
+                <div className="bg-[#2a1215] border-[3px] border-[#ff2a2a] p-3.5 flex flex-col gap-2.5 shadow-[4px_4px_0px_0px_#ff2a2a]">
+                  <div className="flex flex-col">
+                    <span className="font-headline-lg-mobile text-[20px] text-[#ff4d4d] uppercase leading-none">
+                      DELETE ALL APP HISTORY & DATA
+                    </span>
+                    <span className="font-sans text-[12px] text-neutral-300 mt-1 leading-snug">
+                      Permanently erases all past viewing history, swipe logs, liked memes, saved Vault items, Mood Boards, and local cache from this device.
+                    </span>
+                  </div>
+                  {confirmWipeMode === 'all' ? (
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleWipeAllAppData}
+                        className="flex-1 bg-[#ff2a2a] text-white border-[2px] border-black py-2.5 px-4 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer font-bold"
+                      >
+                        ⚠️ YES, DELETE EVERYTHING NOW
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmWipeMode('none')}
+                        className="bg-surface-container-high text-white border-[2px] border-outline py-2.5 px-4 font-label-xl text-[14px] uppercase cursor-pointer"
+                      >
+                        CANCEL
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmWipeMode('all')}
+                      className="w-full bg-[#ff2a2a] hover:brightness-110 text-white border-[2px] border-black py-2.5 px-4 font-label-xl text-[15px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer font-bold"
+                    >
+                      <Trash2 size={17} />
+                      <span>DELETE ALL PAST HISTORY & DATA</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Feed & Capsule Experience Preferences */}
+              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-3">
+                <span className="font-label-xl text-[14px] text-secondary-container uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap size={16} />
+                  <span>CAPSULE FEED & EXPERIENCE</span>
+                </span>
+
+                {/* Toggle 1: Auxiliary Reddit Stream */}
+                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between gap-3 shadow-[3px_3px_0px_0px_#000]">
+                  <div className="flex flex-col">
+                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                      HYBRID REDDIT RELAY STREAM
+                    </span>
+                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
+                      Mixes fresh SFW Reddit memes every 3rd drop alongside the curated Meme Capsule D1 Vault.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleRedditStream}
+                    className={`w-[68px] h-[36px] border-[2px] border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                      redditStreamEnabled
+                        ? 'bg-[#34c759] text-black font-bold'
+                        : 'bg-surface-container-high text-outline'
+                    }`}
+                  >
+                    {redditStreamEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* Toggle 2: 7-Meme Turbo Prefetch Buffer */}
+                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between gap-3 shadow-[3px_3px_0px_0px_#000]">
+                  <div className="flex flex-col">
+                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                      7-MEME TURBO PREFETCH BUFFER
+                    </span>
+                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
+                      Preloads up to 7 capsules in the background for zero-latency swiping. Turn off to save mobile data.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={togglePrefetchBuffer}
+                    className={`w-[68px] h-[36px] border-[2px] border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                      prefetchEnabled
+                        ? 'bg-[#34c759] text-black font-bold'
+                        : 'bg-surface-container-high text-outline'
+                    }`}
+                  >
+                    {prefetchEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* Toggle 3: Card Shake & Recoil Animations */}
+                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between gap-3 shadow-[3px_3px_0px_0px_#000]">
+                  <div className="flex flex-col">
+                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                      CARD RECOIL & SHAKE EFFECTS
+                    </span>
+                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
+                      Physical arcade card shake when double-tapping or stamping reactions on a meme.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleShakeEffects}
+                    className={`w-[68px] h-[36px] border-[2px] border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                      shakeEffectsEnabled
+                        ? 'bg-[#34c759] text-black font-bold'
+                        : 'bg-surface-container-high text-outline'
+                    }`}
+                  >
+                    {shakeEffectsEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {/* Toggle 4: Arcade FX Style Selector */}
+                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col gap-2 shadow-[3px_3px_0px_0px_#000]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
+                      ARCADE CARD RECOIL FX
+                    </span>
+                    <span className="font-label-md text-[10px] text-outline uppercase">
+                      {entitlements.grants.has('fx_arcade') ? 'PACK UNLOCKED' : '1 OF 4 UNLOCKED'}
+                    </span>
+                  </div>
+                  <p className="font-sans text-[12px] text-neutral-400 leading-snug">
+                    Pick physical card recoil & impact styles on drop and reaction.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {(['classic', 'retro_slam', 'neon_glitch', 'cassette_pop'] as ArcadeFxStyle[]).map((styleId) => {
+                      const isOwned = styleId === 'classic' || entitlements.grants.has('fx_arcade');
+                      const isSelected = activeFx === styleId;
+                      const cfg = ARCADE_FX_STYLES[styleId];
+                      return (
+                        <button
+                          key={styleId}
+                          type="button"
+                          onClick={() => {
+                            if (isOwned) {
+                              setActiveFx(styleId);
+                            } else {
+                              openStore({ focus: PRODUCTS.FX_ARCADE });
+                            }
+                          }}
+                          className={`border-2 p-2 font-label-md text-[12px] uppercase flex items-center justify-between cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary-container text-white border-black font-bold shadow-[2px_2px_0_#000]'
+                              : isOwned
+                              ? 'bg-[#1c1b1b] text-neutral-300 border-outline hover:text-white'
+                              : 'bg-[#161616] text-neutral-500 border-neutral-700'
+                          }`}
+                        >
+                          <span>{cfg.name}</span>
+                          <span>{isOwned ? (isSelected ? '✓' : '') : '🔒'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Pro Membership & App Guide */}
+              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-2.5">
+                <span className="font-label-xl text-[14px] text-primary uppercase tracking-wider flex items-center gap-1.5">
+                  <Crown size={16} />
+                  <span>MEMBERSHIP & APP GUIDE</span>
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => openStore()}
+                    className="bg-secondary-container text-on-secondary-container border-[2px] border-background p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-between cursor-pointer font-bold"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Crown size={17} />
+                      <span>CAPSULE STORE</span>
+                    </div>
+                    <span className="text-[18px]">→</span>
+                  </button>
+
+                  <button type="button" disabled={isPurchasing} onClick={() => void restorePurchases()}
+                    className="bg-surface-container-high text-white border-[2px] border-outline p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0_#000] flex items-center justify-center gap-2 disabled:opacity-50">
+                    <RotateCcw size={17} /><span>{isPurchasing ? 'PLEASE WAIT…' : 'RESTORE PURCHASES'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsOnboardingOpen(true)}
+                    className="bg-surface-container-high hover:bg-primary text-white border-[2px] border-outline p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <HelpCircle size={17} />
+                    <span>REPLAY GESTURE TOUR</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsRatingModalOpen(true)}
+                    className="bg-surface-container-high hover:bg-secondary-container hover:text-black text-white border-[2px] border-outline p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Star size={17} className="text-secondary-container" />
+                    <span>RATE ON PLAY STORE</span>
+                  </button>
+                </div>
+              </div>
+
+              <ThemePicker onOpenStore={(focus) => openStore({ focus })} />
+
+              {/* 5. Privacy Policy, Support & Credits Section */}
+              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-2.5">
+                <span className="font-label-xl text-[14px] text-outline uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield size={16} />
+                  <span>PRIVACY, LEGAL & ABOUT</span>
+                </span>
+
+                <a
+                  href="https://memecapsule.wtf/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full bg-surface-container-low hover:bg-surface-container-high border-[2px] border-outline p-3.5 flex items-center justify-between shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="bg-primary/20 border border-primary p-2 text-primary">
+                      <Shield size={20} />
+                    </div>
+                    <div>
+                      <span className="font-label-xl text-[15px] text-white uppercase block font-bold">
+                        PRIVACY POLICY & TERMS
+                      </span>
+                      <span className="font-sans text-[12px] text-neutral-400 block">
+                        memecapsule.wtf/privacy • Official privacy policy & legal disclosures
+                      </span>
+                    </div>
+                  </div>
+                  <ExternalLink size={18} className="text-secondary-container shrink-0" />
+                </a>
+
+                <div className="flex items-center justify-between px-1 pt-1 text-[11px] font-label-md text-outline uppercase">
+                  <span>MEME CAPSULE v3.6 (BUILD 27)</span>
+                  <span>ANTI-ALGORITHM ENTERTAINMENT</span>
+                </div>
+              </div>
+            </div>
           </section>
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-[68px] px-sm pb-safe bg-surface-container-highest border-t-[3px] border-outline md:max-w-[500px] md:left-1/2 md:-translate-x-1/2 md:border-x-[3px] md:bottom-md md:rounded-lg shadow-[0px_-4px_16px_0px_rgba(0,0,0,0.5)]">
-        <button onClick={() => { if (activeTab === 'home') { setScreen('waiting'); setMeme(null); } else { setActiveTab('home'); } }} className={`rounded-none px-8 py-2 border-[2px] border-background flex flex-col items-center justify-center scale-95 transition-transform duration-100 cursor-pointer ${activeTab === 'home' ? 'bg-primary text-on-primary shadow-[2px_2px_0px_0px_var(--color-secondary-container)] -translate-y-1.5' : 'text-on-surface opacity-70 hover:bg-secondary-container hover:text-[#000]'}`}>
-          <Home size={28} />
+      <nav className="fixed bottom-0 left-0 w-full z-[1020] flex justify-around items-center h-[calc(60px+max(env(safe-area-inset-bottom,0px),16px))] px-sm pt-2 pb-[max(env(safe-area-inset-bottom,0px),16px)] bg-surface-container-highest border-t-[3px] border-outline md:max-w-[500px] md:left-1/2 md:-translate-x-1/2 md:border-x-[3px] shadow-[0px_-4px_16px_0px_rgba(0,0,0,0.5)]">
+        <button
+          type="button"
+          onClick={() => {
+            setShowMoreMenu(false);
+            if (activeTab === 'home') {
+              if (meme) {
+                // Keep the current meme right at the front of memeQueue so tapping DROP ME A MEME restores it immediately without re-downloading
+                setMemeQueue((prev) => [meme, ...prev.filter((m) => m.url !== meme.url)].slice(0, PIPELINE_TARGET_SIZE));
+              }
+              sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+              localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+              localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+              setScreen('waiting');
+              setMeme(null);
+            } else {
+              setActiveTab('home');
+            }
+          }}
+          className={`rounded-none h-[46px] px-7 sm:px-9 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+            activeTab === 'home'
+              ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
+              : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
+          }`}
+          style={{ touchAction: 'manipulation' }}
+          title="Home"
+        >
+          <Home size={24} strokeWidth={2.5} />
         </button>
-        <button onClick={() => setActiveTab('favorites')} className={`rounded-none px-8 py-2 border-[2px] border-background flex flex-col items-center justify-center scale-95 transition-transform duration-100 cursor-pointer ${activeTab === 'favorites' ? 'bg-primary text-on-primary shadow-[2px_2px_0px_0px_var(--color-secondary-container)] -translate-y-1.5' : 'text-on-surface opacity-70 hover:bg-secondary-container hover:text-[#000]'}`}>
-          <Flame size={28} />
+        <button
+          type="button"
+          onClick={() => {
+            setShowMoreMenu(false);
+            setActiveTab('favorites');
+          }}
+          className={`rounded-none h-[46px] px-7 sm:px-9 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+            activeTab === 'favorites'
+              ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
+              : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
+          }`}
+          style={{ touchAction: 'manipulation' }}
+          title="Vault / Favorites"
+        >
+          <Flame size={24} strokeWidth={2.5} />
         </button>
-        <button onClick={() => setActiveTab('boards')} className={`rounded-none px-6 py-2 border-[2px] border-background flex flex-col items-center justify-center scale-95 transition-transform duration-100 cursor-pointer ${activeTab === 'boards' ? 'bg-primary text-on-primary shadow-[2px_2px_0px_0px_var(--color-secondary-container)] -translate-y-1.5' : 'text-on-surface opacity-70 hover:bg-secondary-container hover:text-[#000]'}`}>
-          <LayoutGrid size={26} />
+        <button
+          type="button"
+          onClick={() => {
+            setShowMoreMenu(false);
+            setActiveTab('boards');
+          }}
+          className={`rounded-none h-[46px] px-7 sm:px-9 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+            activeTab === 'boards'
+              ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
+              : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
+          }`}
+          style={{ touchAction: 'manipulation' }}
+          title="Moodboards"
+        >
+          <LayoutGrid size={22} strokeWidth={2.5} />
         </button>
       </nav>
     </div>

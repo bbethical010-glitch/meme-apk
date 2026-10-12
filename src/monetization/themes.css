@@ -1,0 +1,43 @@
+.app-container[data-theme='theme_cyberpunk_cyan'] {
+  --color-primary: #9bf6ff;
+  --color-primary-container: #00b5cf;
+  --color-on-primary: #00262c;
+  --color-on-primary-container: #001619;
+  --color-secondary: #c4f9ff;
+  --color-secondary-container: #00e5ff;
+  --color-on-secondary-container: #001619;
+  --color-tertiary-container: #dd0061;
+}
+
+.app-container[data-theme='theme_acid_green'] {
+  --color-primary: #ceff8c;
+  --color-primary-container: #7abb00;
+  --color-on-primary: #192600;
+  --color-on-primary-container: #152000;
+  --color-secondary: #e5ffb8;
+  --color-secondary-container: #adff2f;
+  --color-on-secondary-container: #152000;
+  --color-tertiary-container: #a300cc;
+}
+
+.app-container[data-theme='theme_midnight_gold'] {
+  --color-primary: #ffd700;
+  --color-primary-container: #f4c300;
+  --color-on-primary: #241a00;
+  --color-on-primary-container: #0e0e0e;
+  --color-secondary: #fff2b2;
+  --color-secondary-container: #d4af37;
+  --color-on-secondary-container: #1a1500;
+  --color-tertiary-container: #e6a100;
+}
+
+.app-container[data-theme='theme_blood_orange'] {
+  --color-primary: #ff784e;
+  --color-primary-container: #ff4500;
+  --color-on-primary: #330d00;
+  --color-on-primary-container: #1f0800;
+  --color-secondary: #ffb299;
+  --color-secondary-container: #ff5722;
+  --color-on-secondary-container: #210b05;
+  --color-tertiary-container: #d81b60;
+}

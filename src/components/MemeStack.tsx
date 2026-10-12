@@ -3,6 +3,8 @@ import { useSprings, to } from '@react-spring/web';
 import { useDrag } from '@use-gesture/react';
 import { MemeCard } from './MemeCard';
 import type { Meme, DismissDecision } from '../types';
+import { memeDimensionCache, computeCanvasDimensions, CanvasDimensions } from '../utils/dimensions';
+import { ARCADE_FX_STYLES, type ArcadeFxStyle } from '../monetization/arcadeFx';
 
 export interface MemeStackRef {
   triggerKeep: () => void;
@@ -30,6 +32,9 @@ interface MemeStackProps {
   onOpenBoardPicker?: () => void;
   isPinnedToBoard?: (m: Meme) => boolean;
   onLongPress?: (m: Meme) => void;
+  canvasDimensions?: CanvasDimensions;
+  onDimensionsLoaded?: (dims: { width: number; height: number }) => void;
+  activeFxStyle?: ArcadeFxStyle;
 }
 
 const SPRING_CONFIG = {
@@ -48,23 +53,23 @@ const POS_CONFIG = [
     rotateZ: 0,
     opacity: 1.0,
     zIndex: 40,
-    boxShadow: '8px 8px 0px #f4c300',
+    boxShadow: '6px 6px 0px #f4c300',
   },
   // Position 1 (Second card)
   {
     scale: 0.95,
-    y: 18,
+    y: 10,
     z: -40,
     x: 0,
     rotateZ: 0,
     opacity: 0.9,
     zIndex: 30,
-    boxShadow: '6px 6px 0px #9b30ff',
+    boxShadow: '5px 5px 0px #9b30ff',
   },
   // Position 2 (Third card)
   {
     scale: 0.90,
-    y: 34,
+    y: 18,
     z: -80,
     x: 0,
     rotateZ: 0,
@@ -75,7 +80,7 @@ const POS_CONFIG = [
   // Position 3 (Fourth card)
   {
     scale: 0.85,
-    y: 48,
+    y: 24,
     z: -120,
     x: 0,
     rotateZ: 0,
@@ -107,6 +112,9 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
       onOpenBoardPicker,
       isPinnedToBoard,
       onLongPress,
+      canvasDimensions,
+      onDimensionsLoaded,
+      activeFxStyle = 'classic',
     },
     ref
   ) => {
@@ -116,27 +124,51 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
     const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null);
     const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+    const currentFx = ARCADE_FX_STYLES[activeFxStyle] || ARCADE_FX_STYLES.classic;
+    const currentSpringConfig = currentFx.spring;
+
     // Visible 4 cards
     const visibleMemes = memes.slice(0, 4);
-    const [activeDimensions, setActiveDimensions] = useState<{ width: number; height: number } | null>(null);
+    const activeMeme = memes[0];
+    const [activeDimensions, setActiveDimensions] = useState<{ width: number; height: number } | null>(() => {
+      return activeMeme?.url ? memeDimensionCache.get(activeMeme.url) || null : null;
+    });
+
+    const handleDimensionsLoaded = React.useCallback(
+      (dims: { width: number; height: number }) => {
+        setActiveDimensions(dims);
+        if (onDimensionsLoaded) {
+          onDimensionsLoaded(dims);
+        }
+      },
+      [onDimensionsLoaded]
+    );
 
     // Spring controller for 4 card positions
     const [springs, api] = useSprings(4, (index) => ({
       ...POS_CONFIG[index],
-      config: SPRING_CONFIG,
+      config: currentSpringConfig,
     }));
 
     // Reset springs and dimensions whenever the top meme changes and we're not actively dismissing
     useEffect(() => {
-      setActiveDimensions(null);
+      if (activeMeme?.url) {
+        const cached = memeDimensionCache.get(activeMeme.url);
+        if (cached) {
+          setActiveDimensions(cached);
+          if (onDimensionsLoaded) onDimensionsLoaded(cached);
+        } else {
+          setActiveDimensions(null);
+        }
+      }
       if (!isDismissingRef.current) {
         api.start((index) => ({
           ...POS_CONFIG[index],
-          config: SPRING_CONFIG,
+          config: currentSpringConfig,
           immediate: false,
         }));
       }
-    }, [memes[0]?.url, api]);
+    }, [activeMeme?.url, api, onDimensionsLoaded]);
 
     // Handle dismissal logic with spring animation
     const dismissCard = (decision: DismissDecision) => {
@@ -180,7 +212,7 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
         const nextPos = POS_CONFIG[i - 1];
         return {
           ...nextPos,
-          config: SPRING_CONFIG,
+          config: currentSpringConfig,
         };
       });
 
@@ -205,8 +237,15 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
 
     // Gesture binding for Position 0 using @use-gesture/react
     const bind = useDrag(
-      ({ active, movement: [mx, my], velocity: [vx, vy], direction: [dx, dy], cancel }) => {
+      ({ active, movement: [mx, my], velocity: [vx, vy], direction: [dx, dy], cancel, event }) => {
         if (isDismissingRef.current) {
+          cancel();
+          return;
+        }
+
+        // If interaction originated from an interactive button (Download, Share, Report, etc.), abort drag
+        const target = event?.target as Element | null;
+        if (target && (target.tagName === 'BUTTON' || target.closest('button'))) {
           cancel();
           return;
         }
@@ -228,9 +267,10 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
             if (i === 1) {
               const dragDistance = Math.max(Math.abs(mx), Math.max(0, -my));
               const progress = Math.min(1, dragDistance / 80);
+              const startY = POS_CONFIG[1].y;
               return {
                 scale: 0.95 + progress * 0.05,
-                y: 18 - progress * 18,
+                y: startY - progress * startY,
                 opacity: 0.9 + progress * 0.1,
                 immediate: true,
               };
@@ -260,13 +300,19 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
         }
       },
       {
-        filterTaps: true,
+        pointer: { capture: false },
+        filterTaps: false,
         rubberband: true,
       }
     );
 
     // Double-tap & Long-press detection on active card
     const handlePointerDown = (e: React.PointerEvent) => {
+      // Ignore clicks on child buttons so card gestures don't hijack them
+      const target = e.target as Element | null;
+      if (target && (target.tagName === 'BUTTON' || target.closest('button'))) {
+        return;
+      }
       pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
 
       // Long press (600ms) for gallery download
@@ -307,14 +353,18 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
       return null;
     }
 
+    const effectiveDimensions =
+      canvasDimensions ||
+      computeCanvasDimensions(activeDimensions?.width, activeDimensions?.height);
+
     return (
       <div
-        className="w-full flex justify-center items-center relative perspective-deck select-none"
+        className="flex justify-center items-center relative perspective-deck select-none"
         style={{
-          width: 'min(85vw, 380px)',
-          aspectRatio: activeDimensions ? `${activeDimensions.width} / ${activeDimensions.height}` : '4/3',
-          minHeight: '200px',
-          maxHeight: '75vh',
+          width: `${effectiveDimensions.width}px`,
+          height: `${effectiveDimensions.height}px`,
+          maxWidth: '92vw',
+          transition: 'width 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), height 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)',
         }}
       >
         {/* Render 4 stacked cards from bottom (position 3) to top (position 0) */}
@@ -344,9 +394,10 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
               isDragging={isActive && isDragging}
               isLoading={isActive ? isLoading : false}
               shakeCard={isActive ? shakeCard : false}
+              shakeClass={currentFx.shakeClass}
               memeFeedback={isActive ? memeFeedback : null}
               floatingReaction={isActive ? floatingReaction : null}
-              onDimensionsLoaded={isActive ? setActiveDimensions : undefined}
+              onDimensionsLoaded={isActive ? handleDimensionsLoaded : undefined}
               isLiked={isActive && likedMemes.includes(item.url)}
               onToggleLike={isActive && onToggleLike ? () => onToggleLike(item) : undefined}
               reactionEmoji={isActive ? memeReactions[item.url] : undefined}
