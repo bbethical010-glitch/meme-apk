@@ -12,6 +12,7 @@ import {
 interface OnboardingModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenPrivacyPolicy?: () => void;
 }
 
 const ONBOARDING_SLIDES = [
@@ -43,20 +44,20 @@ const ONBOARDING_SLIDES = [
   },
   {
     id: 3,
-    tag: '👑',
-    title: 'GO PRO',
-    subtitle: 'Remove ads. Unlock everything.',
+    tag: '📌',
+    title: 'PIN YOUR ENERGY',
+    subtitle: 'Your collection. Your rules.',
     bullets: [
-      'Triple Drop → 3 memes at once',
-      'Unlimited Vault storage',
-      'Zero ads, forever',
+      'Create a board for every mood',
+      'Tap PIN → keep a meme on your board',
+      'Long-press a saved pin → remove it',
     ],
     icon: Zap,
     color: 'from-tertiary-container to-secondary-container',
   },
 ];
 
-export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProps) {
+export default function OnboardingModal({ isOpen, onClose, onOpenPrivacyPolicy }: OnboardingModalProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
 
   if (!isOpen) return null;
@@ -165,6 +166,19 @@ export default function OnboardingModal({ isOpen, onClose }: OnboardingModalProp
             )}
           </button>
         </div>
+
+        {/* Legal Link */}
+        {onOpenPrivacyPolicy && (
+          <div className="bg-surface-container-low px-md pb-2 pt-0 flex justify-center">
+            <button
+              type="button"
+              onClick={onOpenPrivacyPolicy}
+              className="text-[11px] font-sans text-outline hover:text-on-surface underline underline-offset-2 cursor-pointer"
+            >
+              Privacy Policy (v1.1)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

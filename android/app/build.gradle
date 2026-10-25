@@ -7,14 +7,18 @@ android {
         applicationId "com.meme.capsule"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
-        versionName "2.3"
+        versionCode 29
+        versionName "3.8"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+    }
+    buildFeatures {
+        buildConfig = true
     }
     signingConfigs {
         release {
@@ -25,12 +29,58 @@ android {
         }
     }
     buildTypes {
+        debug {
+            Properties localProps = new Properties()
+            def localPropsFile = rootProject.file('local.properties')
+            if (localPropsFile.exists()) {
+                localPropsFile.withInputStream { localProps.load(it) }
+            }
+            def stagingToken = System.getenv("ANALYTICS_APP_TOKEN_STAGING") ?:
+                               System.getenv("ANALYTICS_APP_TOKEN") ?:
+                               project.findProperty("ANALYTICS_APP_TOKEN_STAGING") ?:
+                               project.findProperty("ANALYTICS_APP_TOKEN") ?:
+                               localProps.getProperty("ANALYTICS_APP_TOKEN_STAGING", "") ?:
+                               localProps.getProperty("ANALYTICS_APP_TOKEN", "")
+            def stagingEndpoint = System.getenv("ANALYTICS_ENDPOINT_STAGING") ?:
+                                  System.getenv("ANALYTICS_ENDPOINT") ?:
+                                  project.findProperty("ANALYTICS_ENDPOINT_STAGING") ?:
+                                  project.findProperty("ANALYTICS_ENDPOINT") ?:
+                                  "https://meme-capsule-eww.pages.dev/api/analytics/events"
+            def escapedToken = stagingToken.replace('\\', '\\\\').replace('"', '\\"')
+            def escapedEndpoint = stagingEndpoint.replace('\\', '\\\\').replace('"', '\\"')
+            buildConfigField "String", "ANALYTICS_APP_TOKEN", "\"${escapedToken}\""
+            buildConfigField "String", "ANALYTICS_ENDPOINT", "\"${escapedEndpoint}\""
+        }
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
+
+            Properties localProps = new Properties()
+            def localPropsFile = rootProject.file('local.properties')
+            if (localPropsFile.exists()) {
+                localPropsFile.withInputStream { localProps.load(it) }
+            }
+            def prodToken = System.getenv("ANALYTICS_APP_TOKEN_PROD") ?:
+                            System.getenv("ANALYTICS_APP_TOKEN") ?:
+                            project.findProperty("ANALYTICS_APP_TOKEN_PROD") ?:
+                            project.findProperty("ANALYTICS_APP_TOKEN") ?:
+                            localProps.getProperty("ANALYTICS_APP_TOKEN_PROD", "") ?:
+                            localProps.getProperty("ANALYTICS_APP_TOKEN", "")
+            def prodEndpoint = System.getenv("ANALYTICS_ENDPOINT_PROD") ?:
+                               System.getenv("ANALYTICS_ENDPOINT") ?:
+                               project.findProperty("ANALYTICS_ENDPOINT_PROD") ?:
+                               project.findProperty("ANALYTICS_ENDPOINT") ?:
+                               "https://meme-capsule-eww.pages.dev/api/analytics/events"
+            def escapedToken = prodToken.replace('\\', '\\\\').replace('"', '\\"')
+            def escapedEndpoint = prodEndpoint.replace('\\', '\\\\').replace('"', '\\"')
+            buildConfigField "String", "ANALYTICS_APP_TOKEN", "\"${escapedToken}\""
+            buildConfigField "String", "ANALYTICS_ENDPOINT", "\"${escapedEndpoint}\""
         }
+    }
+    testOptions {
+        unitTests.returnDefaultValues = true
     }
 }
 
@@ -46,7 +96,10 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation "androidx.work:work-runtime:2.9.1"
+    implementation "com.google.guava:guava:31.1-android"
     testImplementation "junit:junit:$junitVersion"
+    testImplementation 'org.json:json:20240303'
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
@@ -61,4 +114,39 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def isRelease = taskGraph.allTasks.any { task ->
+        task.name.toLowerCase().contains("release") && !task.name.toLowerCase().contains("test")
+    }
+    if (isRelease) {
+        Properties localProps = new Properties()
+        def localPropsFile = rootProject.file('local.properties')
+        if (localPropsFile.exists()) {
+            localPropsFile.withInputStream { localProps.load(it) }
+        }
+        def token = System.getenv("ANALYTICS_APP_TOKEN") ?:
+                    project.findProperty("ANALYTICS_APP_TOKEN") ?:
+                    localProps.getProperty("ANALYTICS_APP_TOKEN", "")
+
+        if (!token || token.trim().isEmpty() ||
+            token.toLowerCase().contains("placeholder") ||
+            token.toLowerCase().contains("your_production_token")) {
+            throw new GradleException(
+                "RELEASE BUILD SECURITY ERROR: ANALYTICS_APP_TOKEN is required for release builds.\n" +
+                "Provide it via environment variable ANALYTICS_APP_TOKEN, -PANALYTICS_APP_TOKEN, or local.properties.\n" +
+                "ALLOW_EMPTY_ANALYTICS_TOKEN is forbidden for release packaging (assembleRelease, bundleRelease)."
+            )
+        }
+
+        def endpoint = System.getenv("ANALYTICS_ENDPOINT") ?:
+                       project.findProperty("ANALYTICS_ENDPOINT") ?:
+                       "https://meme-capsule-eww.pages.dev/api/analytics/events"
+        if (endpoint.contains("localhost") || endpoint.contains("127.0.0.1") || endpoint.startsWith("http://")) {
+            throw new GradleException(
+                "RELEASE BUILD SECURITY ERROR: Release builds must not point to local/unencrypted endpoints: ${endpoint}"
+            )
+        }
+    }
 }

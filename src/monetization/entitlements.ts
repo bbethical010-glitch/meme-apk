@@ -24,7 +24,7 @@ export interface Entitlements {
 
 export const ENTITLEMENT_CACHE_KEY = 'meme_capsule_entitlements_v2';
 export const ENTITLEMENT_TTL = 60 * 60 * 1000;
-export const FREE_BOARD_LIMIT = 3;
+export const FREE_BOARD_LIMIT = 7;
 
 /**
  * Maps every ProductId to its full set of entitlement keys.

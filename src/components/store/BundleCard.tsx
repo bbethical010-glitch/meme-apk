@@ -113,14 +113,14 @@ export default function BundleCard({
         </h3>
 
         {/* Description */}
-        <p className="font-sans text-[13px] text-neutral-300 leading-snug mb-3">
+        <p className="font-body-md text-[13.5px] text-[#e5e2e1] leading-relaxed mb-3.5 normal-case font-normal">
           {bundle.shortDescription}
         </p>
 
         {/* INCLUDES Chips (Scrollable if tall) */}
         {bundle.includes.length > 0 && (
           <div className="mb-3">
-            <span className="block font-label-md text-[10px] text-neutral-400 uppercase tracking-wider mb-1.5">
+            <span className="block font-label-md text-[11px] text-neutral-400 uppercase tracking-widest font-bold mb-1.5">
               INCLUDES ({bundle.includes.length} UNLOCKS):
             </span>
             <div className="flex flex-wrap gap-1 max-h-[140px] overflow-y-auto scrollbar-none pr-1">
@@ -131,10 +131,10 @@ export default function BundleCard({
                 return (
                   <span
                     key={componentId}
-                    className={`font-label-md text-[10px] uppercase px-1.5 py-0.5 border flex items-center gap-1 ${
+                    className={`font-body-md text-[11px] normal-case px-2 py-0.5 border flex items-center gap-1 font-medium ${
                       owned
                         ? 'bg-[#152000] border-[#7abb00] text-[#ceff8c]'
-                        : 'bg-[#2a2a2a] border-outline/50 text-neutral-300'
+                        : 'bg-[#2a2a2a] border-outline/50 text-neutral-200'
                     }`}
                   >
                     {owned ? '✓ ' : ''}
@@ -148,10 +148,12 @@ export default function BundleCard({
 
         {/* Partial ownership warning note */}
         {hasPartialOwnership && (
-          <div className="mb-3 p-2 bg-[#261f18] border-2 border-[#f4c300]/60 font-sans text-[11px] text-[#ffe08b] leading-tight">
-            ⚠️ <strong>ALREADY OWN {ownedCount} OF {totalComponents} ITEMS</strong>
-            <p className="text-[10px] text-neutral-300 mt-0.5">
-              Google Play charges full bundle price without prorating.
+          <div className="mb-3 p-2.5 bg-[#261f18] border-2 border-[#f4c300]/60 text-[#ffe08b]">
+            <span className="font-label-xl text-[12px] uppercase font-bold block">
+              ⚠️ ALREADY OWN {ownedCount} OF {totalComponents} ITEMS
+            </span>
+            <p className="font-body-md text-[12px] text-neutral-300 mt-1 leading-normal normal-case">
+              Google Play charges the full bundle price without prorating.
             </p>
           </div>
         )}

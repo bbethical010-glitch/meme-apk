@@ -15,7 +15,7 @@ export interface Meme {
 export interface MoodBoard {
   id: string;
   title: string;
-  color: 'primary' | 'secondary' | 'tertiary';
+  color: 'primary' | 'secondary' | 'tertiary' | string;
   memeUrls: string[];
   createdAt: number;
 }

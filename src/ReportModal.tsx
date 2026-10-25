@@ -137,7 +137,7 @@ export default function ReportModal({
                       </span>
                       {isSelected && <CheckCircle size={14} className="text-error" />}
                     </div>
-                    <span className="font-label-md text-[10px] text-outline mt-0.5">
+                    <span className="font-body-md text-[12px] text-on-surface-variant/90 mt-0.5 normal-case leading-snug">
                       {r.description}
                     </span>
                   </button>
@@ -157,7 +157,7 @@ export default function ReportModal({
               placeholder="Provide any additional context (e.g. offensive username, targeted hate, etc.)..."
               rows={2}
               maxLength={300}
-              className="w-full bg-surface-container-low border-[2px] border-outline text-on-surface font-label-md text-[12px] p-2 focus:outline-none focus:border-error uppercase resize-none"
+              className="w-full bg-surface-container-low border-[2px] border-outline text-on-surface font-body-md text-[13px] p-2 focus:outline-none focus:border-error resize-none leading-relaxed"
             />
             <span className="text-[9px] text-outline text-right font-mono">
               {details.length}/300
@@ -199,7 +199,7 @@ export default function ReportModal({
               )}
             </button>
           </div>
-          <p className="text-[10px] text-outline text-center mt-1">
+          <p className="font-body-md text-[11px] text-outline text-center mt-1 leading-snug">
             Reported content will be hidden from your feed and submitted to moderators.
           </p>
         </form>

@@ -103,7 +103,7 @@ graph TD
 | **Quick Emoji Picker** | [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx) & [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | 6 persistent reactions: `💀` (DEAD), `🔥` (FIRE), `😂` (LMAO), `🗿` (BRUH), `❤️` (LOVE), `👑` (KING). Animates floating emoji on select and pins reaction badge to card corner. |
 | **UGC Reporting Modal** | [src/ReportModal.tsx](file:///Users/prathampandey/Desktop/zip/src/ReportModal.tsx) | `IMPLEMENTED` | Google Play compliance requirement: Dedicated modal reporting offensive username, hate speech, NSFW, violence, or other violations. Submits to `${ANALYTICS_API_BASE}/api/report`. |
 | **Clean Bottom Strip (No Meme IDs)** | [src/components/MemeCard.tsx](file:///Users/prathampandey/Desktop/zip/src/components/MemeCard.tsx) | `IMPLEMENTED` | Shows title and `@author • r/sub` for Reddit memes. Internal R2/DB IDs are strictly hidden for clean presentation. Features red `REPORT` button. |
-| **Meme Vault (Favorites)** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Searchable local collection of favorited memes with count stats. **Free tier limit:** 20 memes (`FREE_VAULT_LIMIT = 20`). **Pro tier:** Unlimited. |
+| **Meme Vault (Favorites)** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Searchable local collection of favorited memes with count stats. **Free tier limit:** 100 memes (`FREE_VAULT_LIMIT = 100`). **Pro tier:** Unlimited. |
 | **Mood Boards ("Pinned Energy")** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Multi-board organization with custom theme colors (`primary`, `secondary`, `tertiary`) and grid views. |
 | **Pro Upgrade Tier (IAP)** | [src/ProUpgradeModal.tsx](file:///Users/prathampandey/Desktop/zip/src/ProUpgradeModal.tsx) & [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | In-App Purchase via Google Play Billing (`remove_ads_forever`). Unlocks: Zero Ads, Triple Drop Mode, Unlimited Vault, Priority Drops. |
 | **AdMob Monetization** | [src/App.tsx](file:///Users/prathampandey/Desktop/zip/src/App.tsx) | `IMPLEMENTED` | Interstitial ad every 4th meme viewed on native Android (`INTERSTITIAL_FREQUENCY = 4`). Rewarded interstitial ads for bonus drops. Automatically bypassed if `isPro === true`. |
@@ -132,11 +132,11 @@ graph TD
   2. Implemented dynamic aspect ratio canvas: card dimensions dynamically match the natural image aspect ratio (`aspectRatio: memeDimensions ? '${memeDimensions.width} / ${memeDimensions.height}' : '4/3'`) with maximum constraints.
   3. Removed distracting "FRESH DROP" badge.
 
-### Build Outputs in [builds/](file:///Users/prathampandey/Desktop/zip/builds)
-- `builds/app-debug.apk` & `builds/meme-capsule-debug.apk` (Latest debug binaries, ~12 MB)
-- `builds/meme-capsule-screen-fix-debug.apk` (Bar fix build)
-- `builds/meme-capsule-ui-cleanup-debug.apk` (Cleaned UI build)
-- `builds/meme-capsule.aab` & `builds/app-release.aab` (Google Play production App Bundles, ~7.8 MB)
+### Build Outputs in [builds/](file:///Users/prathampandey/Desktop/zip/builds) & Recent v3.7 Updates
+- `builds/meme-capsule-v3.7.apk` & `builds/app-release.apk` (Latest signed release build, versionCode 28)
+- `builds/meme-capsule-debug.apk` & `builds/meme-capsule-latest.apk` (Latest debug APK, versionCode 28)
+- Includes updated screen-transition AdMob interstitial logic (shifting between Vault, Settings, Mood Boards, Home with 30s cooldown; completely purged from meme scrolling).
+- `builds/app-release.aab` & `builds/meme-capsule-v3.7.aab` (Google Play production App Bundles)
 
 ---
 
@@ -258,7 +258,16 @@ bridge.getWebView().addJavascriptInterface(new MemeCapsuleDownloads(this), "Meme
   activity.startActivity(Intent.createChooser(shareIntent, "Share Meme Capsule image"));
   ```
 
-#### 3. System Bar & UI Color Configuration
+#### 3. Analytics Native Bridge: `window.MemeCapsuleAnalytics`
+Registered via `MemeCapsuleAnalyticsBridge.java`:
+- `trackEvent(String eventName, String propertiesJson, String memeId, String category, String sourceChannel, String screenName)`
+- `setConsent(boolean analyticsConsent, boolean advertisingConsent, int version)`
+- `getConsentStatus()`: Returns JSON string with `analytics_consent`, `advertising_consent`, `consent_version`, `consent_timestamp_utc`.
+- `flushQueue()`: Manually triggers an asynchronous flush of the offline SQLite event queue.
+- `getDiagnostics()`: Returns JSON string with queue count, accepted/rejected/dropped counters, last flush time, and last error (never exposes user hashes, tokens, or raw event payloads).
+- **Authentication Abstraction (`AnalyticsAuthProvider`):** Employs `StaticTokenAuthProvider` (staging compatibility) with `PlayIntegrityAuthProvider` design stub (explicitly unsupported until backend attestation is deployed; never claimed as active). Release packaging (`assembleRelease`, `bundleRelease`) strictly requires a valid token and forbids bypasses. Production web assets never bundle client tokens (`VITE_ANALYTICS_APP_TOKEN` eliminated). Browser analytics remains disabled on non-native web runtimes without configured credentials.
+
+#### 4. System Bar & UI Color Configuration
 To ensure a pure cyber-dark experience without visual glitches:
 - Window background: `#131313`.
 - Status bar & navigation bar: `#131313` with dark icons disabled (`controller.setAppearanceLightStatusBars(false)`).
@@ -361,3 +370,13 @@ cd android && ./gradlew assembleDebug
 # Compile release App Bundle (AAB) for Google Play
 cd android && ./gradlew bundleRelease
 ```
+
+### 5. Automated Tests (Unit & Analytics Verification)
+```bash
+# Run Vitest test suite (TypeScript analytics & monetization)
+npx vitest run
+
+# Run Android JVM unit tests (offline queue, schema v1, SHA-256 user_hash, backoff)
+cd android && ./gradlew testDebugUnitTest
+```
+

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Meme Capsule — Brag</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root { --bg:#131313; --panel:#1c1b1b; --purple:#9b30ff; --gold:#f4c300; --pink:#dd0061; --cyan:#00e5ff; --white:#f7f5f5; --muted:#a79cac; }
+      * { box-sizing: border-box; }
+      html, body { margin:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--white); }
+      body { font-family: Arial, sans-serif; }
+      #root { position:relative; width:100%; height:100%; overflow:hidden; background:var(--bg); }
+      .bg { position:absolute; inset:0; background:radial-gradient(circle at 16% 30%, rgba(155,48,255,.22), transparent 26%), radial-gradient(circle at 86% 76%, rgba(221,0,97,.16), transparent 30%), #131313; }
+      .grain { position:absolute; inset:0; opacity:.1; background-image:radial-gradient(#fff 0.7px, transparent .7px); background-size:6px 6px; mix-blend-mode:screen; }
+      .scan { position:absolute; left:0; right:0; height:2px; background:rgba(244,195,0,.22); box-shadow:0 0 22px rgba(244,195,0,.35); }
+      .scan.s1 { top:18%; } .scan.s2 { top:78%; background:rgba(221,0,97,.24); }
+      .grid { position:absolute; inset:0; opacity:.12; background-image:linear-gradient(rgba(255,255,255,.2) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.2) 1px, transparent 1px); background-size:80px 80px; mask-image:linear-gradient(to bottom,transparent,black 18%,black 82%,transparent); }
+      .clip { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+      .scene { position:relative; width:100%; height:100%; }
+      .eyebrow { font-family:monospace; font-size:22px; letter-spacing:.28em; color:var(--gold); font-weight:700; }
+      .headline { margin:0; font-size:118px; line-height:.88; letter-spacing:-.055em; font-weight:900; text-transform:uppercase; }
+      .headline.small { font-size:76px; }
+      .mono { font-family:monospace; letter-spacing:.07em; }
+      .accent { color:var(--gold); } .pink { color:var(--pink); } .purple { color:var(--purple); } .cyan { color:var(--cyan); }
+      .offset { text-shadow:8px 8px 0 var(--pink), -5px -5px 0 var(--purple); }
+      .box { border:4px solid #050505; box-shadow:9px 9px 0 #000; background:var(--panel); }
+      .pill { border:3px solid #050505; padding:11px 18px; box-shadow:4px 4px 0 #000; font-family:monospace; font-weight:900; letter-spacing:.09em; }
+      .phone { width:590px; height:880px; border:10px solid #050505; border-radius:46px; background:#201f1f; box-shadow:18px 18px 0 #000, 0 0 70px rgba(155,48,255,.35); padding:30px; position:absolute; right:240px; top:100px; overflow:hidden; }
+      .phone:before { content:""; position:absolute; width:120px; height:14px; border-radius:20px; background:#050505; top:14px; left:225px; }
+      .phone-top { display:flex; justify-content:space-between; align-items:center; font-family:monospace; font-size:18px; margin-top:22px; color:var(--muted); }
+      .app-label { color:var(--gold); font-size:30px; font-weight:900; letter-spacing:.08em; }
+      .hit { margin:135px auto 38px; width:390px; height:188px; display:flex; align-items:center; justify-content:center; background:var(--gold); color:#0b0b0b; border:8px solid #050505; box-shadow:14px 14px 0 var(--pink); font-size:76px; font-weight:900; letter-spacing:-.08em; }
+      .phone-badges { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+      .phone-badges span { background:#0f0f0f; border:2px solid #4d4355; padding:10px 12px; color:var(--cyan); font-family:monospace; font-size:15px; }
+      .tap { position:absolute; width:76px; height:76px; border:5px solid white; border-radius:50%; box-shadow:0 0 0 14px rgba(255,255,255,.13),0 0 35px white; }
+      .terminal { width:1100px; padding:46px 58px; background:#080808; border:4px solid var(--purple); box-shadow:12px 12px 0 #000, 0 0 80px rgba(155,48,255,.25); position:absolute; left:410px; top:245px; }
+      .term-head { display:flex; justify-content:space-between; color:var(--muted); font-family:monospace; font-size:20px; margin-bottom:38px; }
+      .log { font-family:monospace; font-size:30px; line-height:1.55; color:#e8dff2; }
+      .log b { color:var(--cyan); } .log em { color:var(--gold); font-style:normal; }
+      .counter { position:absolute; right:60px; bottom:36px; font-family:monospace; color:var(--pink); font-size:38px; font-weight:900; }
+      .cards { position:absolute; left:280px; top:170px; width:1360px; height:700px; perspective:1200px; }
+      .mcard { position:absolute; width:500px; height:620px; left:430px; top:24px; padding:34px; border:7px solid #050505; box-shadow:15px 15px 0 #000; transform-origin:center bottom; }
+      .mcard.back1 { background:#463067; left:315px; top:68px; transform:rotate(-11deg); }
+      .mcard.back2 { background:#7a174f; left:560px; top:55px; transform:rotate(10deg); }
+      .mcard.front { background:var(--gold); color:#090909; z-index:3; }
+      .meme-window { margin-top:54px; height:330px; background:#131313; border:5px solid #050505; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; }
+      .meme-window span { color:var(--white); font-size:56px; font-weight:900; line-height:.95; letter-spacing:-.05em; }
+      .meme-footer { display:flex; justify-content:space-between; align-items:end; margin-top:28px; font-family:monospace; font-size:18px; }
+      .rarity { background:#ff2a85; color:#050505; padding:9px 13px; border:3px solid #050505; font-weight:900; }
+      .swipe { position:absolute; right:130px; bottom:75px; color:var(--cyan); font-family:monospace; font-size:22px; letter-spacing:.15em; }
+      .cta-panel { width:1200px; position:absolute; left:360px; top:244px; }
+      .cta-title { font-size:34px; font-family:monospace; color:var(--muted); margin-bottom:28px; letter-spacing:.12em; }
+      .cta-row { display:flex; gap:18px; }
+      .cta { flex:1; height:130px; display:flex; align-items:center; justify-content:center; font-size:30px; font-family:monospace; font-weight:900; color:#090909; border:5px solid #050505; box-shadow:8px 8px 0 #000; }
+      .cta.like{background:#ff2a85}.cta.vault{background:#a855f7;color:white}.cta.pin{background:#facc15}.cta.more{background:#00e5ff}
+      .share-menu { width:620px; margin:64px auto 0; background:#f7f5f5; color:#0b0b0b; border:5px solid #050505; box-shadow:10px 10px 0 #000; padding:28px; display:flex; justify-content:space-between; align-items:center; }
+      .share-menu strong { font-size:31px; letter-spacing:.04em; } .share-dots { display:flex; gap:18px; }
+      .dot { width:46px; height:46px; border-radius:50%; border:4px solid #050505; }
+      .d1{background:#25d366}.d2{background:#229ed9}.d3{background:#5865f2}.d4{background:#e1306c}
+      .proof { width:1360px; display:flex; gap:26px; flex-direction:column; align-items:center; }
+      .proof-row { display:flex; gap:24px; }
+      .proof-card { width:380px; height:144px; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#201f1f; border:4px solid #050505; box-shadow:7px 7px 0 #000; }
+      .proof-card strong { font-size:35px; letter-spacing:-.04em; } .proof-card span { font-family:monospace; color:var(--muted); margin-top:10px; font-size:16px; }
+      .close { flex-direction:column; text-align:center; }
+      .close img { width:190px; height:190px; object-fit:cover; border:8px solid #050505; box-shadow:11px 11px 0 var(--gold); margin-bottom:26px; }
+      .close h2 { margin:0; font-size:102px; line-height:.85; letter-spacing:-.06em; font-weight:900; }
+      .close p { margin:28px 0 0; font-family:monospace; font-size:28px; letter-spacing:.12em; color:var(--gold); }
+      .close small { margin-top:20px; font-family:monospace; color:var(--muted); font-size:18px; letter-spacing:.1em; }
+      .flare { position:absolute; width:520px; height:520px; border-radius:50%; border:3px solid rgba(244,195,0,.24); box-shadow:0 0 0 38px rgba(221,0,97,.08), 0 0 0 82px rgba(155,48,255,.06); }
+      .particle { position:absolute; width:10px; height:10px; background:var(--gold); box-shadow:0 0 15px var(--gold); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="meme-capsule-brag" data-start="0" data-width="1920" data-height="1080" data-duration="30">
+      <div class="bg"></div><div class="grid"></div><div class="grain"></div><div class="scan s1"></div><div class="scan s2"></div>
+
+      <section class="clip" data-start="0" data-duration="3"><div class="scene hook"><div class="flare"></div><div class="particle p1"></div><div class="particle p2"></div><div class="particle p3"></div><div style="text-align:center;position:relative;z-index:2"><div class="eyebrow hook-eyebrow">THE ANTI-FEED ARCADE</div><h1 class="headline hook-line1">NO FEED.</h1><h1 class="headline hook-line2 pink">NO DOOMSCROLL.</h1><h2 class="headline small accent hook-line3">JUST HIT ME.</h2></div></div></section>
+
+      <section class="clip" data-start="3" data-duration="4"><div class="scene"><div class="phone"><div class="phone-top"><span class="app-label">MEME CAPSULE</span><span>● 07:07</span></div><div class="hit">HIT ME</div><div class="phone-badges"><span>STREAK 07</span><span>12 READY IN FIFO</span><span>ZERO FEED</span></div></div><div class="tap tap-button"></div><div class="eyebrow" style="position:absolute;left:280px;top:270px;color:var(--cyan)">ONE ACTION. INSTANT PAYLOAD.</div></div></section>
+
+      <section class="clip" data-start="7" data-duration="4"><div class="scene"><div class="terminal"><div class="term-head"><span>MEME CAPSULE // DECRYPTION CONSOLE</span><span>SESSION_07</span></div><div class="log log1"><b>&gt;</b> CONTACTING MEME NETWORK...</div><div class="log log2"><b>&gt;</b> HARVESTING CLOUDFLARE D1 SHARDS...</div><div class="log log3"><b>&gt;</b> FILTERING CRINGE FREQUENCIES...</div><div class="log log4"><b>&gt;</b> EXTRACTING COMEDY CORE CODE...</div><div class="counter">69.69</div></div></div></section>
+
+      <section class="clip" data-start="11" data-duration="6"><div class="scene"><div class="cards"><div class="mcard back1"></div><div class="mcard back2"></div><div class="mcard front"><div class="eyebrow" style="color:#090909">CAPSULE OPENED</div><div class="meme-window"><span>WHEN THE BUILD PASSES FIRST TRY</span></div><div class="meme-footer"><span>MEME CAPSULE / D1 VAULT</span><span class="rarity">EPIC DROP</span></div></div><div class="swipe">SWIPE → TO DEPLOY</div></div></div></section>
+
+      <section class="clip" data-start="17" data-duration="5"><div class="scene"><div class="cta-panel"><div class="cta-title">YOUR PAYLOAD. YOUR MOVE.</div><div class="cta-row"><div class="cta like">LIKE</div><div class="cta vault">VAULT</div><div class="cta pin">PIN</div><div class="cta more">MORE ⋮</div></div><div class="share-menu"><strong>SHARE TO THE CHAT</strong><div class="share-dots"><div class="dot d1"></div><div class="dot d2"></div><div class="dot d3"></div><div class="dot d4"></div></div></div></div></div></section>
+
+      <section class="clip" data-start="22" data-duration="4"><div class="scene"><div class="proof"><div class="eyebrow">THE RECEIPT</div><div class="proof-row"><div class="proof-card"><strong class="accent">ZERO ACCOUNTS</strong><span>privacy by default</span></div><div class="proof-card"><strong class="pink">ZERO ALGORITHM</strong><span>serendipity only</span></div><div class="proof-card"><strong class="cyan">HAND-CURATED</strong><span>quality over slop</span></div></div></div></div></section>
+
+      <section class="clip" data-start="26" data-duration="4"><div class="scene close"><img src="assets/meme_capsule_app_icon_design.png" alt="Meme Capsule icon"><h2>MEME<br><span class="pink">CAPSULE</span></h2><p>ONE TAP. ONE MEME. ZERO FLUFF.</p><small>OPEN ONE. SEND ONE. ESCAPE.</small></div></section>
+
+      <audio id="bg-music" data-start="0" data-duration="30" data-track-index="10" data-volume="0.32" src="assets/music/happy-beats-business-moves-vol-1-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-click" data-start="3.55" data-duration="1" data-track-index="11" data-volume="0.72" src="assets/sfx/interface/click_001.ogg"></audio>
+      <audio id="sfx-glitch" data-start="9.9" data-duration="1" data-track-index="12" data-volume="0.58" src="assets/sfx/interface/glitch_002.ogg"></audio>
+      <audio id="sfx-card" data-start="11.2" data-duration="1" data-track-index="13" data-volume="0.72" src="assets/sfx/casino/card-slide-1.ogg"></audio>
+      <audio id="sfx-final" data-start="26.3" data-duration="1" data-track-index="14" data-volume="0.82" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+    </div>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const q = (s) => document.querySelector(s);
+      const qa = (s) => document.querySelectorAll(s);
+      tl.fromTo('.hook-eyebrow', {y:30, opacity:0}, {y:0, opacity:1, duration:.35, ease:'power3.out'}, .15)
+        .fromTo('.hook-line1', {x:-90, opacity:0}, {x:0, opacity:1, duration:.45, ease:'power4.out'}, .35)
+        .fromTo('.hook-line2', {x:90, opacity:0}, {x:0, opacity:1, duration:.45, ease:'power4.out'}, .7)
+        .fromTo('.hook-line3', {scale:.5, opacity:0}, {scale:1, opacity:1, duration:.55, ease:'back.out(1.7)'}, 1.35)
+        .fromTo('.flare', {scale:.4, opacity:0}, {scale:1, opacity:.35, duration:1.2, ease:'power2.out'}, .2)
+        .fromTo('.p1', {x:-300,y:260,opacity:0}, {x:160,y:-180,opacity:1,duration:1.2,ease:'power2.out'}, .3)
+        .fromTo('.p2', {x:300,y:-200,opacity:0}, {x:-220,y:170,opacity:1,duration:1.1,ease:'power2.out'}, .6)
+        .fromTo('.p3', {x:-400,y:-100,opacity:0}, {x:360,y:130,opacity:1,duration:1.4,ease:'power2.out'}, .85)
+        .fromTo('.phone', {x:400, rotation:8, opacity:0}, {x:0, rotation:0, opacity:1, duration:.75, ease:'power3.out'}, 3.15)
+        .fromTo('.tap-button', {x:410,y:360,scale:.4,opacity:0}, {x:250,y:400,scale:1,opacity:1,duration:.45,ease:'back.out(1.7)'}, 3.55)
+        .to('.tap-button', {scale:1.25, opacity:0, duration:.3, ease:'power2.out'}, 4.05)
+        .fromTo('.eyebrow', {y:20,opacity:0}, {y:0,opacity:1,duration:.35,ease:'power2.out'},3.2)
+        .fromTo('.terminal', {scale:.86, opacity:0, rotation:-1}, {scale:1,opacity:1,rotation:0,duration:.6,ease:'power3.out'},7)
+        .fromTo('.log1', {x:-40,opacity:0}, {x:0,opacity:1,duration:.35},7.35)
+        .fromTo('.log2', {x:-40,opacity:0}, {x:0,opacity:1,duration:.35},7.8)
+        .fromTo('.log3', {x:-40,opacity:0}, {x:0,opacity:1,duration:.35},8.25)
+        .fromTo('.log4', {x:-40,opacity:0}, {x:0,opacity:1,duration:.35},8.7)
+        .fromTo('.counter', {scale:1.6,opacity:0}, {scale:1,opacity:1,duration:.45,ease:'back.out(1.5)'},9.25)
+        .fromTo('.back1', {x:-300,rotation:-25,opacity:0}, {x:0,rotation:-11,opacity:1,duration:.5,ease:'power3.out'},11.1)
+        .fromTo('.back2', {x:300,rotation:25,opacity:0}, {x:0,rotation:10,opacity:1,duration:.5,ease:'power3.out'},11.35)
+        .fromTo('.front', {y:240,scale:.82,opacity:0}, {y:0,scale:1,opacity:1,duration:.65,ease:'back.out(1.35)'},11.65)
+        .fromTo('.swipe', {x:80,opacity:0}, {x:0,opacity:1,duration:.35},14.6)
+        .to('.front', {x:-240,rotation:-18,duration:.55,ease:'power3.in'},15.15)
+        .fromTo('.cta-title', {y:30,opacity:0}, {y:0,opacity:1,duration:.35},17.05)
+        .fromTo('.cta', {y:70,scale:.8,opacity:0}, {y:0,scale:1,opacity:1,duration:.38,stagger:.14,ease:'back.out(1.55)'},17.35)
+        .fromTo('.share-menu', {y:100,scale:.86,opacity:0}, {y:0,scale:1,opacity:1,duration:.55,ease:'back.out(1.4)'},18.2)
+        .fromTo('.share-dots .dot', {scale:0,rotation:-30,opacity:0}, {scale:1,rotation:0,opacity:1,duration:.35,stagger:.1,ease:'back.out(1.7)'},18.65)
+        .fromTo('.proof .eyebrow', {y:25,opacity:0}, {y:0,opacity:1,duration:.35},22.1)
+        .fromTo('.proof-card', {y:80,opacity:0,scale:.82}, {y:0,opacity:1,scale:1,duration:.45,stagger:.22,ease:'back.out(1.5)'},22.45)
+        .fromTo('.close img', {scale:.3,rotation:-30,opacity:0}, {scale:1,rotation:0,opacity:1,duration:.7,ease:'back.out(1.7)'},26.1)
+        .fromTo('.close h2', {y:45,opacity:0}, {y:0,opacity:1,duration:.6,ease:'power3.out'},26.55)
+        .fromTo('.close p', {y:25,opacity:0}, {y:0,opacity:1,duration:.45},27.2)
+        .fromTo('.close small', {y:20,opacity:0}, {y:0,opacity:1,duration:.4},27.7)
+        .to('.close img', {rotation:4,duration:.4,ease:'sine.inOut',repeat:3,yoyo:true},28.1);
+      window.__timelines['meme-capsule-brag'] = tl;
+    </script>
+  </body>
+</html>

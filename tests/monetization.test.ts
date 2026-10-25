@@ -93,9 +93,9 @@ describe('reward lifetimes', () => {
   it('grants one slot, resets on cold start, and keeps saved boards intact', async () => {
     localStorage.setItem('meme_mood_boards', '[{"id":"existing"}]');
     const rewards = await import('../src/monetization/rewards');
-    rewards.startRewardSession(); expect(rewards.canCreateBoard(3)).toBe(false);
-    rewards.grantBonusBoard(); expect(rewards.canCreateBoard(3)).toBe(true);
-    expect(rewards.canCreateBoard(4)).toBe(false);
+    rewards.startRewardSession(); expect(rewards.canCreateBoard(rewards.FREE_BOARD_LIMIT)).toBe(false);
+    rewards.grantBonusBoard(); expect(rewards.canCreateBoard(rewards.FREE_BOARD_LIMIT)).toBe(true);
+    expect(rewards.canCreateBoard(rewards.FREE_BOARD_LIMIT + 1)).toBe(false);
     rewards.startRewardSession(); expect(rewards.getBonusBoards()).toBe(1); // StrictMode remount
     vi.resetModules();
     const nextSession = await import('../src/monetization/rewards');
@@ -231,5 +231,33 @@ describe('native ad boundaries', () => {
     const ads = await import('../src/monetization/ads');
     await ads.maybeShowInterstitial(4); await ads.setBannerVisible(true);
     expect(native.initialize).not.toHaveBeenCalled();
+  });
+  it('triggers interstitial on screen shift and respects cooldown and same-screen checks', async () => {
+    native.purchases.mockResolvedValue({ purchases: [] });
+    const ads = await import('../src/monetization/ads');
+    ads.resetInterstitialCooldownForTesting();
+    native.prepareInterstitial.mockClear();
+    native.showInterstitial.mockClear();
+
+    // Same screen: no ad
+    await ads.maybeShowScreenTransitionInterstitial('home', 'home');
+    expect(native.prepareInterstitial).not.toHaveBeenCalled();
+
+    // Screen transition: triggers ad
+    const transition = ads.maybeShowScreenTransitionInterstitial('home', 'favorites');
+    await vi.waitFor(() => expect(native.showInterstitial).toHaveBeenCalledTimes(1));
+    native.listeners.get('interstitial-dismissed')?.();
+    await transition;
+
+    // Immediate second transition within cooldown: suppressed
+    await ads.maybeShowScreenTransitionInterstitial('favorites', 'boards');
+    expect(native.showInterstitial).toHaveBeenCalledTimes(1);
+
+    // After cooldown reset: triggers ad again
+    ads.resetInterstitialCooldownForTesting();
+    const secondTransition = ads.maybeShowScreenTransitionInterstitial('favorites', 'boards');
+    await vi.waitFor(() => expect(native.showInterstitial).toHaveBeenCalledTimes(2));
+    native.listeners.get('interstitial-dismissed')?.();
+    await secondTransition;
   });
 });

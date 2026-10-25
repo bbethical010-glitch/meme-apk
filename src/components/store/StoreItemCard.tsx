@@ -74,17 +74,17 @@ export default function StoreItemCard({
         </h3>
 
         {/* Short Description */}
-        <p className="font-sans text-[13px] text-neutral-300 leading-snug mb-3">
+        <p className="font-body-md text-[13.5px] text-[#e5e2e1] leading-relaxed mb-3.5 normal-case font-normal">
           {item.shortDescription}
         </p>
 
         {/* Feature highlight chip */}
-        <div className="p-2 bg-black/40 border border-outline/30 mb-2">
-          <span className="font-label-md text-[11px] text-secondary-container uppercase tracking-wider block">
+        <div className="p-2.5 bg-black/50 border border-outline/40 mb-2">
+          <span className="font-label-md text-[11px] text-secondary-container uppercase tracking-widest font-bold block mb-1">
             PERMANENT UNLOCK
           </span>
-          <span className="font-sans text-[12px] text-neutral-400">
-            One-time purchase. Bound to your device & account.
+          <span className="font-body-md text-[12px] text-neutral-300 leading-normal normal-case block">
+            One-time purchase. Bound to your device & Google Play account.
           </span>
         </div>
       </div>

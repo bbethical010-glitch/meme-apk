@@ -1,772 +1,794 @@
-# MASTER KNOWLEDGE DOCUMENT: MEME CAPSULE
-**Comprehensive Product, Architecture, Engineering, and Operational Reference**
+# MEME CAPSULE — MASTER KNOWLEDGE DOCUMENT
+### Complete Product & Technical Specification Reference
 
----
-
-## DOCUMENT METADATA
-- **Project / App Name:** MEME CAPSULE
-- **Android Package ID:** `com.meme.capsule`
-- **Current Version:** `1.0.0` (Internal Testing / Pre-Production)
-- **Primary Domain & Landing Site:** `https://memecapsule.wtf/`
-- **Serverless API Base:** `https://meme-capsule-eww.pages.dev`
-- **Google Play Category:** Entertainment / Casual
-- **Target Platform:** Android (Native Wrapper via Capacitor 8, API Level 21+ to 35) + Progressive Web Application (PWA)
-- **Document Status:** Master Reference & Canonical Source of Truth
+> **Document Type:** Master Architectural & Product Reference  
+> **Target Audience:** Developers, AI Coding Agents, Product Managers, Content Curators, Designers, Marketers  
+> **App / Project Name:** Meme Capsule (Android App, Web PWA, Serverless Edge Backend, Promo & Press Platform)  
+> **Package Identifier:** `com.meme.capsule`  
+> **Official Domains:** [https://memecapsule.wtf](https://memecapsule.wtf) (Official Site) | `https://meme-capsule-eww.pages.dev` (Edge API & PWA)  
+> **Developer:** Pratham Pandey (`memecapsule.app@gmail.com`)  
+> **Status:** Production v1.0.0 on Google Play | Serverless Edge on Cloudflare Pages/D1/R2 | Multi-Page Static Prerendered Web Platform  
 
 ---
 
 ## TABLE OF CONTENTS
 
 1. [Project at a Glance — Core Product Questions](#1-project-at-a-glance--core-product-questions)
-2. [Executive Project Overview](#2-executive-project-overview)
-3. [Product Identity, Philosophy & Vision](#3-product-identity-philosophy--vision)
-4. [Target Users, Personas & Use Cases](#4-target-users-personas--use-cases)
-5. [Complete Feature Inventory](#5-complete-feature-inventory)
-6. [User Experience & Application Workflows](#6-user-experience--application-workflows)
-7. [Technical Architecture Overview](#7-technical-architecture-overview)
-8. [Frontend Architecture & UI Engineering](#8-frontend-architecture--ui-engineering)
-9. [Android Native Bridge & Packaging](#9-android-native-bridge--packaging)
-10. [Backend Architecture & Cloudflare Serverless](#10-backend-architecture--cloudflare-serverless)
-11. [Database, Schemas & Data Modeling](#11-database-schemas--data-modeling)
-12. [APIs, Network Protocols & External Integrations](#12-apis-network-protocols--external-integrations)
-13. [AI / Machine Learning Systems Analysis](#13-ai--machine-learning-systems-analysis)
-14. [Security, Privacy, Content Moderation & Permissions](#14-security-privacy-content-moderation--permissions)
-15. [Admin, Analytics & Telemetry Pipeline](#15-admin-analytics--telemetry-pipeline)
-16. [UI/UX Design System & Cyber-Brutalist Aesthetic](#16-uiux-design-system--cyber-brutalist-aesthetic)
-17. [Project Terminology & Domain Glossary](#17-project-terminology--domain-glossary)
-18. [Current Implementation Status Matrix](#18-current-implementation-status-matrix)
-19. [Roadmap, Planned Features & Technical Debt](#19-roadmap-planned-features--technical-debt)
-20. [Known Issues, Bugs, Limitations & Open Questions](#20-known-issues-bugs-limitations--open-questions)
-21. [Development History, Debugging Log & Architectural Decisions](#21-development-history-debugging-log--architectural-decisions)
-22. [Product Differentiation & Key Characteristics](#22-product-differentiation--key-characteristics)
-23. [Content-Ready Project Descriptions](#23-content-ready-project-descriptions)
-24. [AI-Handoff & Portable Agent Context](#24-ai-handoff--portable-agent-context)
-25. [Final Master Summary](#25-final-master-summary)
+2. [Chapter 1: Executive Project Overview](#2-chapter-1-executive-project-overview)
+3. [Chapter 2: Product Identity, Vision & Philosophy](#3-chapter-2-product-identity-vision--philosophy)
+4. [Chapter 3: Target Users & Core Scenarios](#4-chapter-3-target-users--core-scenarios)
+5. [Chapter 4: Complete Feature Inventory](#5-chapter-4-complete-feature-inventory)
+6. [Chapter 5: User Experience & Application Workflows](#6-chapter-5-user-experience--application-workflows)
+7. [Chapter 6: Holistic Technical Architecture](#7-chapter-6-holistic-technical-architecture)
+8. [Chapter 7: Frontend Architecture (Mobile App & Web Platform)](#8-chapter-7-frontend-architecture-mobile-app--web-platform)
+9. [Chapter 8: Backend Architecture (Cloudflare Serverless Edge)](#9-chapter-8-backend-architecture-cloudflare-serverless-edge)
+10. [Chapter 9: Database & Data Model (D1 SQLite & R2 Storage)](#10-chapter-9-database--data-model-d1-sqlite--r2-storage)
+11. [Chapter 10: APIs, Advertising & External Integrations](#11-chapter-10-apis-advertising--external-integrations)
+12. [Chapter 11: AI / ML Systems (Pre-Judge Pipeline)](#12-chapter-11-ai--ml-systems-pre-judge-pipeline)
+13. [Chapter 12: Authentication, Security, Privacy & Permissions](#13-chapter-12-authentication-security-privacy--permissions)
+14. [Chapter 13: Admin, Curation & Moderation Systems](#14-chapter-13-admin-curation--moderation-systems)
+15. [Chapter 14: End-to-End System Workflows & Data Flows](#15-chapter-14-end-to-end-system-workflows--data-flows)
+16. [Chapter 15: UI/UX & Neo-Brutalist Design System](#16-chapter-15-uiux--neo-brutalist-design-system)
+17. [Chapter 16: Technical Infrastructure, SEO/GEO & Deployment Pipelines](#17-chapter-16-technical-infrastructure-seogeo--deployment-pipelines)
+18. [Chapter 17: Performance, Core Web Vitals & Offline Mechanics](#18-chapter-17-performance-core-web-vitals--offline-mechanics)
+19. [Chapter 18: Implementation Status Audit](#19-chapter-18-implementation-status-audit)
+20. [Chapter 19: Product Roadmap & Future Direction](#20-chapter-19-product-roadmap--future-direction)
+21. [Chapter 20: Project Terminology & Master Glossary](#21-chapter-20-project-terminology--master-glossary)
+22. [Chapter 21: Product Differentiation & Key Characteristics](#22-chapter-21-product-differentiation--key-characteristics)
+23. [Chapter 22: Known Limitations, Technical Debt & Resolved Issues](#23-chapter-22-known-limitations-technical-debt--resolved-issues)
+24. [Chapter 23: Development History & Architectural Decisions](#24-chapter-23-development-history--architectural-decisions)
+25. [Chapter 24: Content-Ready Descriptions & Copy Kit](#25-chapter-24-content-ready-descriptions--copy-kit)
+26. [Chapter 25: AI-Handoff / Portable Project Context](#26-chapter-25-ai-handoff--portable-project-context)
+27. [Chapter 26: Final Master Summary](#27-chapter-26-final-master-summary)
 
 ---
 
 ## 1. PROJECT AT A GLANCE — CORE PRODUCT QUESTIONS
 
-> [!NOTE]
-> This section is specifically organized so that any collaborator, stakeholder, or AI coding assistant can extract the core working context of Meme Capsule immediately without parsing the entire manual.
+*(This section is designed to be copyable directly into other AI prompts or onboardings as the definitive self-contained context of Meme Capsule.)*
 
-### 1. What is Meme Capsule?
-**Meme Capsule** is a high-octane, mobile-first entertainment application that delivers curated, unpredictable internet memes one at a time with a single tap. Built with React 19, TypeScript, and Vite, and packaged natively for Android using Capacitor 8, it rejects algorithmic feeds and infinite scrolling in favor of a punchy, arcade-style capsule drop experience.
+### Q1: What is Meme Capsule?
+**Meme Capsule** is a minimalist, anti-algorithm meme delivery ecosystem available as an Android application (Google Play), companion Progressive Web App (PWA), and official multi-page web platform ([https://memecapsule.wtf](https://memecapsule.wtf)). Instead of presenting an endless algorithmic feed, infinite scroll, or social timeline, Meme Capsule provides a single mechanical interaction: **one button ("HIT ME" / "Spawn a Random Meme") that dispenses exactly one hand-curated, high-quality meme at a time.**
 
-### 2. Why does Meme Capsule exist?
-Modern social feeds (TikTok, Instagram Reels, Reddit, X) have become bloated, repetitive, and algorithmically homogenized. Users spend minutes mindless scrolling through recycled videos, brand promotions, and engagement bait just to find a single laugh. Meme Capsule exists to restore the raw, chaotic joy of discovering great memes instantly: **No algorithm. No infinite feed. No doomscrolling. Pure internet culture.**
+### Q2: Why does Meme Capsule exist?
+Modern internet culture is trapped inside social media feeds (Instagram, TikTok, X, Reddit) controlled by recommendation algorithms that optimize for addiction, rage, ads, and repetitive formats. Users spend 45 minutes doomscrolling just to find two genuinely funny memes. Meme Capsule was created to restore the original magic of internet humor: instant, surprise-driven, zero-friction entertainment with no tracking, no accounts, and no algorithmic manipulation.
 
-### 3. What problem is it trying to solve?
-- **Algorithmic Fatigue:** Recommendation algorithms trap users in repetitive bubbles showing the same recycled formats.
-- **Doomscrolling Waste:** Infinite feeds encourage mindless scrolling rather than discrete, satisfying entertainment moments.
-- **Friction in Saving/Sharing:** Finding, cleanly saving, and sending memes to friends on messaging apps (like WhatsApp) typically requires screenshots, cropping, or dealing with external watermarks.
+### Q3: What problem is it trying to solve?
+1. **Algorithmic Fatigue & Doomscrolling:** Eliminates feed-induced sensory overload and screen addiction by replacing continuous vertical scroll with deliberate, discrete single-capsule drops.
+2. **Quality Dilution:** Fixes the low-effort repost problem by curating memes through a multi-stage pipeline: staging via Google Drive, automated multimodal AI pre-judging (NVIDIA NIM Llama 3.2 Vision), human editorial curation, and community reporting.
+3. **Friction & Privacy Intrusion:** Eliminates logins, passwords, tracking cookies, and profile creation. The user opens the app or website and is instantly one tap away from humor.
 
-### 4. Who is Meme Capsule for?
-- **Digital Natives & Meme Connoisseurs (Gen Z & Millennials):** Users who live in group chats, appreciate unhinged web humor, and want high-quality meme ammunition to send friends.
-- **Micro-Break Seekers:** Commuters, students, and professionals looking for a 30-second dopamine hit between tasks rather than a 45-minute social media rabbit hole.
-- **Meme Curators & Hoarders:** Users who organize personal collections into categorized mood boards for every vibe and scenario.
+### Q4: Who is Meme Capsule for?
+* **Primary Users:** Gen-Z and Millennial internet natives, college students, software engineers, and digital humor enthusiasts who want fast, unadulterated laughs during micro-breaks (waiting for transit, code compiling, study breaks).
+* **Group Chat Instigators:** Users whose primary goal is finding fresh, non-stale memes to share directly into WhatsApp, Telegram, Discord, and Instagram DMs.
+* **Secondary Users:** Casual Android users tired of ad-saturated, invasive social media apps.
 
-### 5. How does Meme Capsule work?
-The user opens the app to a bold, arcade-like interface featuring a prominent **`HIT ME`** button. Tapping the button triggers a retro-futuristic hacker decryption sequence while the client queries either the custom Meme Capsule Cloudflare D1/R2 repository or an alternating Reddit meme relay. The fetched image is validated, preloaded, and displayed in an interactive card where the user can double-tap to react, save to their local **Meme Vault**, pin to custom **Mood Boards**, download directly to their Android gallery, or share via the native Android share sheet.
+### Q5: How does Meme Capsule work?
+1. The user opens the app or website and sees an arcade-inspired neo-brutalist interface with a prominent central button: **HIT ME**.
+2. Tapping the button initiates a rapid retro-cybernetic loading sequence ("Hacker Loading") while the client fetches a curated meme payload from Cloudflare D1/R2 (or an alternating Reddit SFW fallback).
+3. The capsule opens with a punchy animation revealing the meme image along with its category and rarity badge.
+4. In the Android app, the user can double-tap to react (triggering tactile card shakes and reaction stamps like `DANK!`, `CRINGE!`, `SO REAL`), save it directly to their Android phone gallery via MediaStore, share it via native Android share sheets, or favorite it to their local offline **Meme Vault**.
+5. On the website, users interact with an authentic live drop preview simulator (with a 5-drop quota and Google Play install bumper), explore 3D interactive phone mockups with real WebP screenshots, review technical breakdowns under Section 04.5 "Under the Hood", access the official Press Kit on `/about`, and consult an expanded 15-question FAQ.
 
-### 6. What are all of its major features?
-- **Single-Tap Capsule Drop:** Instantaneous meme delivery powered by an alternating Cloudflare D1 / Reddit relay.
-- **FIFO Prefetch Pipeline & Swiping:** Vertical swipe gestures (Swipe Up for next drop, Swipe Down for session history) backed by an active 7-meme background prefetch buffer.
-- **Arcade Hacker Loader:** Engaging terminal logs and erratic countdown timers that make latency feel like a gameplay mechanic.
-- **Meme Vault (Favorites):** Local SQLite/localStorage collection of favorited memes with real-time text search and full offline management.
-- **Custom Mood Boards ("Pinned Energy"):** Multi-board organization allowing users to categorize memes into custom themed collections with distinct color identities.
-- **Double-Tap & Quick Emoji Reactions:** Dynamic visual overlays (`DANK!`, `CRINGE!`, `SO REAL`) and 6 selectable persistent emoji reactions (`💀`, `🔥`, `😂`, `🗿`, `❤️`, `👑`).
-- **Native Android MediaStore Integration:** Direct, permissionless image saving into `Pictures/Meme Capsule` via a custom Java bridge, bypassing browser blob limitations.
-- **Native Intent Chooser Sharing:** System-level image caching and `FileProvider` sharing directly to messaging apps.
-- **Streak Tracker & Rank Gamification:** Consecutive day usage counter with status badges (from `🌱 FRESH` to `🏆 MEME GOD`).
-- **Capsule Multi-Drop / Triple Drop:** Pro and rewarded capability to unpack 3 memes simultaneously in a swipeable mini-gallery.
-- **Content Reporting & Local Blacklisting:** Granular safety report modal that instantly removes and permanently blacklists inappropriate memes locally while transmitting moderation telemetry.
-- **In-App Purchase Pro Tier (₹99 One-Time):** Google Play Billing integration unlocking zero ads forever, unlimited vault storage, priority drops, and permanent Triple Drop access.
-- **Silent Analytics Telemetry:** Background event tracking (views, skips, time on meme, likes, shares, downloads) aggregated via Cloudflare Pages and D1.
+### Q6: What are all of its major features?
+* **Single-Tap Capsule Dispenser:** Discrete random meme delivery with zero feed or scroll.
+* **Daily Drop Ritual:** A persistent, once-per-day curated meme that remains identical for all users across that calendar day.
+* **Hacker Loading & Cyber Console:** Diagnostic terminal animations, erratic countdowns, and high-velocity shimmers while decrypting content.
+* **Tactile Double-Tap Reactions:** Dynamic reaction stamps (`DANK!`, `CRINGE!`, `SO REAL`, `GIGA DANK`, `EPIC!`) with haptic card recoil.
+* **Native MediaStore Downloader:** Custom Java native bridge saving memes cleanly into `Pictures/Meme Capsule` without requiring broad Android storage permissions.
+* **Native Android Share Integration:** Direct `Intent.ACTION_SEND` integration with WhatsApp, Instagram, Telegram, and standard apps via FileProvider.
+* **Offline Meme Vault:** Local client-side gallery tracking favorited memes, viewing statistics, and search filtering.
+* **Alternating Feed Engine:** Dynamic traffic distributor ensuring content freshness (every 3rd call queries Reddit meme communities with automatic NSFW and spoiler dropping).
+* **Interactive Web Live Preview:** Web simulator with a 5-drop quota counter, automated fallback recovery, and Google Play install trigger.
+* **3D Interactive Phone Mockups:** 5 authentic Android app screenshots in WebP/JPEG format inside realistic device frames with 3D mouse-tilt physics and full-screen lightbox zoom.
+* **Kage-Inspired Atmospheric Web UI:** Full preloader with animated progress, custom magnetic cursor, GPU-accelerated film grain overlay, vignette shading, desktop scroll rail indicator, kinetic word reveals, and CTA fill-reveal buttons.
+* **Cyberpunk Acid Glitch Mode:** High-saturation chromatic aberration theme toggle with CRT scanlines.
+* **Multi-Page Web Routing:** Dedicated `/about` page (Press Kit, entity definition, copy kit, downloadable assets), `/privacy` page (store-compliant policy), and prerendered static HTML.
+* **Section 04.5 Under the Hood:** Technical transparency section detailing the 5,000+ meme library, Reddit feed safety mechanics, and data privacy philosophy.
+* **Expanded 15-Question FAQ:** Exhaustive answers covering Android requirements, offline vault, WhatsApp sharing, India availability, and developer info.
+* **Google AdSense & AdMob Monetization:** Configured AdSense ad unit `meme1` (slot `6291908699`, `ca-pub-2093403233028868`) and native AdMob interstitials.
+* **AI Meme Pre-Judge:** Cloud pipeline categorizing humor mechanics, topics, and filtering NSFW/toxicity before public ingestion.
+* **Admin & Moderation Console:** Token-protected `/admin` and `/reports` dashboards supporting R2 file uploads, D1 metadata CRUD, and content blacklisting.
 
-### 7. How is it technically built?
-- **Frontend:** React 19 (Hooks), TypeScript 5.8, Vite 6.2, Tailwind CSS v4 (`@tailwindcss/vite`), Lucide React icons.
-- **Mobile Container:** Capacitor 8 (`@capacitor/core`, `@capacitor/android`, `@capacitor/share`, `@capacitor-community/admob`, `@capgo/native-purchases`).
-- **Native Android Layer:** Custom `MainActivity.java` extending `BridgeActivity`, exposing `MemeCapsuleAndroid` via WebKit `addJavascriptInterface` for MediaStore and FileProvider file operations.
-- **Backend & Ingestion:** Cloudflare Pages Functions, Cloudflare D1 (SQLite database), Cloudflare R2 (object storage), Cloudflare KV (analytics response caching).
-- **Secondary Upstream:** Public Reddit API gateway (`https://meme-api.com/gimme`).
+### Q7: How is it technically built?
+* **Mobile Native Wrapper:** Android app built with **Capacitor 8** wrapping a Vite/React SPA, extended with a custom Java native activity bridge (`MainActivity.java`).
+* **Frontend:** React 19 (mobile) / React 18 (website), TypeScript, Tailwind CSS v4 (app) / v3 (website) with neo-brutalist cyber design tokens, Lucide icons.
+* **Web Platform & Pre-rendering:** Vite 5, React Router DOM, static HTML pre-rendering via `vite-plugin-prerender` with deterministic `ReactSSRRenderer` for GitHub Actions CI.
+* **Edge Backend:** **Cloudflare Pages Functions** (serverless edge TypeScript handlers) running on V8 isolates at zero cold-start latency.
+* **Database:** **Cloudflare D1** (distributed SQLite at the edge).
+* **Media Storage:** **Cloudflare R2** (S3-compatible object storage with zero egress bandwidth fees).
+* **AI Evaluation Pipeline:** Python runner executing **NVIDIA NIM Llama 3.2 11B Vision Instruct** for automated topic classification and toxicity filtering.
+* **SEO / GEO / AEO:** 4 linked Schema.org JSON-LD entities (`WebSite`, `Organization`, `MobileApplication`, `FAQPage`), `llms.txt` and `llms-full.txt` protocols for frontier AI crawlers, and XML Sitemap with `lastmod` dates.
+* **Attribution & Analytics:** Google Analytics 4 (`G-8VMD4ZNQQK`), Formspree (`xwlenwzr`), and UTM Play Store campaign tracking (`getPlayStoreUrl`).
 
-### 8. How do users interact with it?
-Interaction is tactile, punchy, and haptic-inspired:
-- **Tapping:** Massive primary buttons (`HIT ME`, `BONUS DROP`, `TRIPLE DROP`) that visually depress and shed their offset shadows on active click.
-- **Swiping:** Mobile vertical swipe up/down gestures with real-time CSS scale and translation damping.
-- **Double-Tapping:** Rapid double-tap on the meme card triggers an animated shaking feedback (`animate-shake`) and floating text reactions.
-- **Long-Pressing:** Holding down on the meme image for 600ms automatically downloads it to the phone gallery.
+### Q8: How do users interact with it?
+Users interact purely through high-contrast tactile touch and cursor controls: tapping large high-visibility buttons, double-tapping cards for haptic emoji stamps, toggling tabs between the Dispenser and the Meme Vault, and triggering native OS dialogs (share sheets and file downloads). On the website, users interact with the live meme drop preview, tilt 3D phone frames, trigger lightboxes, switch to glitch mode, navigate via the scroll rail, and copy press one-liners with single-click clipboard buttons.
 
-### 9. How does its backend work?
-The backend is completely serverless. When the app requests a meme, it calls Cloudflare Pages Functions (`/api/random-meme`) backed by Cloudflare D1. For telemetry, the frontend enqueues client actions into a circular buffer and flushes them in batches to `/api/events`. A background recalculation engine aggregates raw events into normalized ranking tables (`meme_analytics`, `app_global_stats`, `meme_daily_stats`), calculating engagement, virality, and skip scores.
+### Q9: How does its backend work?
+The backend is completely serverless. When a client calls `GET /api/random-meme`, a Cloudflare Pages Function queries the Cloudflare D1 `memes` table for active, non-blacklisted rows using an indexed `random_key` for O(1) random retrieval. It returns a lightweight JSON response pointing to an optimized image asset stored in Cloudflare R2. If D1 or the network fails, the app and website seamlessly fall back to curated fallback drops or SFW Reddit streams.
 
-### 10. How does its AI/ML system work, if applicable?
-**Meme Capsule intentionally does NOT use an AI recommendation algorithm to determine what users see.** The core product philosophy is anti-algorithmic serendipity. While the repository contains Google AI Studio artifacts and `@google/genai` in `package.json` (inherited from the initial project scaffolding), generative AI is not currently used in the live user experience.
+### Q10: How does its AI/ML system work?
+An offline/asynchronous pipeline (`ai-categoriser/categorise.py`) inspects newly ingested raw memes stored in R2. It passes high-resolution image bytes to **NVIDIA NIM (Llama 3.2 11B Vision Instruct)** with an editorial humor taxonomy. The vision model analyzes image-text synergy, humor mechanisms (absurdity, irony, relatability), assigns a topic and tone, flags NSFW or low-effort content, and outputs structured metadata that populates D1 for human superadmin approval.
 
-### 11. What are its most important concepts and workflows?
-- **Capsule Drop:** The discrete act of requesting and rendering one meme.
-- **Alternating Strategy:** 2 custom backend drops followed by 1 Reddit drop (every 3rd view), with automatic safety fallbacks.
-- **Meme Vault vs. Mood Boards:** Vault is the flat master list of favorites; Mood Boards are user-curated thematic binders.
-- **Prefetch Pipeline:** An invisible buffer maintaining up to 7 verified images in memory so swiping feels instantaneous.
+### Q11: What are its most important concepts and workflows?
+* **The "Capsule" Concept:** A meme is not an item in a scrollable list; it is a sealed container that must be opened.
+* **Curation vs. Generation:** Memes are *hand-curated* and human-vetted, never procedurally or artificially generated.
+* **Zero Egress Architecture:** Using Cloudflare R2 ensures that millions of image views never incur egress bandwidth fees.
+* **Zero Account Footprint:** User identity is non-existent. State (vault, stats, favorites) lives exclusively in local device storage.
+* **Under-The-Hood Transparency:** Explicitly educating users and search engines about curation, safety filtering, and privacy without marketing spin.
 
-### 12. What is currently implemented vs. planned?
-- **Implemented:** Full React 19 UI, Neo-Brutalist styling, Dual-source meme fetching, FIFO Prefetching, Vertical touch swiping, Native Android MediaStore download bridge, Native FileProvider share bridge, AdMob Interstitials and Rewarded Ads, Native In-App Purchases (`@capgo/native-purchases`), Mood Boards, Emoji Reactions, Streaks, Content Reporting & Local Blacklisting, Silent Event Telemetry (`/api/events`).
-- **Backend Complete but Admin UI Unlinked:** Cloudflare D1 analytics aggregation and endpoints (`/api/admin/analytics/overview`, `rankings`, `trends`, `insights`) are implemented, but the PIN-gated Admin Dashboard tab is not linked into the frontend navigation.
-- **Planned:** Server-side user accounts/cloud sync, user-submitted meme uploads, social collaborative mood boards, production Google Play rollout.
+### Q12: What is currently implemented vs. planned?
+* **Implemented:** Android App v1.0.0 (Capacitor/Java bridge, MediaStore downloads, Native Share, Hacker Loader, Meme Vault, AdMob), Serverless D1/R2 API (`/api/random-meme`, `/api/daily-meme`), Admin dashboard (`/admin`, `/reports`), AI categorization runner (`categorise.py`), Official Multi-Page Website (`memecapsule.wtf` with Kage UI overhaul, real WebP screenshots, 3D tilt carousel, live preview with quota limiter, `/about` press kit, 15-question FAQ, Google AdSense unit `meme1`, and static pre-rendering).
+* **Planned:** Sound FX soundboard on button clicks, user-submitted meme upload portal directly within the app, cross-device encrypted vault export/import, widget for Android home screen ("Meme of the Hour").
+* **Superseded / Removed:** Giscus GitHub comments scrapped in favor of a clean Formspree contact form with privacy consent. Stacking cards scroll animation reverted in favor of Kage scroll reveal.
 
-### 13. What makes the application different or distinctive?
-Meme Capsule combines an aggressive, high-energy **Neo-Brutalist Arcade** aesthetic (heavy uppercase Anton typography, neon purple/yellow/hot pink palette, chunky 4px borders, hard drop shadows) with an uncompromising **zero-algorithm philosophy**. It transforms passive content browsing into an active, tactile arcade drop.
+### Q13: What makes the application different or distinctive?
+1. **Anti-Feed Interface:** The deliberate absence of a feed forces focus onto a single punchline.
+2. **Neo-Brutalist Cyber Aesthetic:** High-contrast pitch black (`#131313`), neon purple (`#9b30ff`), arcade gold (`#f4c300`), and hot pink (`#dd0061`) with hard geometric borders, mechanical click offsets, CRT grain, and custom cursor magnetics.
+3. **No Login Requirement:** Instant utility from the first second of installation or page load.
+4. **Authentic Mobile Showcasing:** Web platform features interactive 3D mockups of the actual Android interface rather than generic placeholder graphics.
 
-### 14. What terminology or project-specific concepts should someone understand before working on it?
-- **MemeCapsuleAndroid:** The native Java interface injected into the WebView to handle Android 10+ MediaStore permissions cleanly.
-- **Pipeline:** The client-side array (`memeQueue`) preloading images in advance.
-- **D1 Vault:** The internal Cloudflare D1 storage bucket holding curated memes.
-- **Erratic Counter:** A CSS `@keyframes` trick that cycles random numbers to simulate decryption without consuming CPU JS timers.
+### Q14: What terminology should someone understand before working on it?
+* `Capsule`: The conceptual container holding a single meme drop.
+* `Spawn / Drop`: The act of dispensing a random meme from the backend.
+* `Meme Vault`: The user's offline saved favorites repository.
+* `R2 + D1`: Cloudflare's object storage (R2) and edge SQLite database (D1).
+* `Acid / Glitch Mode`: High-saturation chromatic aberration theme toggle.
+* `Hacker Loading`: Retro console diagnostic sequence displayed before meme presentation.
+* `Scroll Rail`: Fixed vertical progress indicator on the website.
+* `Bumper`: Conversion lockout modal triggered after 5 web preview drops prompting app download.
 
 ---
 
-## 2. EXECUTIVE PROJECT OVERVIEW
+## 2. CHAPTER 1 — EXECUTIVE PROJECT OVERVIEW
 
-Meme Capsule is a specialized Android entertainment app developed to counteract the fatigue induced by modern infinite-scroll social networks. Rather than indexing user data to build an algorithmic engagement trap, Meme Capsule curates internet humor and distributes it in discrete, high-impact "drops."
+### 1.1 Project Summary
+**Meme Capsule** is an Android mobile application, companion Progressive Web App (PWA), and dedicated web platform designed as an intentional counter-movement against algorithmic social media feeds. It dispenses hand-picked internet memes individually on demand with a single click.
 
 ```
-+-------------------------------------------------------------------------+
-|                              MEME CAPSULE                               |
-|                  "One Tap. One Meme. Pure Chaos."                       |
-+-------------------------------------------------------------------------+
-|  [ FRONTEND - REACT 19 ]      [ NATIVE BRIDGE ]      [ BACKEND - D1/R2 ]|
-|  - Neo-Brutalist Arcade UI    - Capacitor 8 Android  - Cloudflare Pages |
-|  - FIFO Preload Pipeline      - Java MediaStore API  - D1 SQLite Tables |
-|  - Vertical Swipe Engine      - FileProvider Shares  - R2 Image Storage |
-|  - Vault & Mood Boards        - Native Google Billing- Batch Telemetry  |
-+-------------------------------------------------------------------------+
+       ┌─────────────────────────────────────────────────────────┐
+       │                      MEME CAPSULE                       │
+       │           One Tap. One Meme. Pure Chaos.                │
+       └────────────────────────────┬────────────────────────────┘
+                                    │
+           ┌────────────────────────┼────────────────────────┐
+           ▼                        ▼                        ▼
+  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+  │   ANDROID APP    │    │  EDGE API & PWA  │    │  PROMO WEBSITE   │
+  │ Capacitor 8/Java │    │ Cloudflare Pages │    │ Vite / React 18  │
+  │ MediaStore Sync  │    │ D1 SQL / R2 CDN  │    │ memecapsule.wtf  │
+  └──────────────────┘    └──────────────────┘    └──────────────────┘
 ```
 
-### One-Paragraph Overview
-> **Meme Capsule** is a mobile-first, arcade-styled meme discovery application for Android that provides instant, hand-picked internet comedy at the push of a single button. Designed with a vibrant cyber-brutalist aesthetic, the app replaces monotonous feed scrolling with a high-energy "capsule drop" loop, combining seamless vertical swipe navigation, native Android gallery downloads, direct social sharing, customizable mood boards, and streak gamification, all backed by a resilient serverless architecture on Cloudflare.
+### 1.2 The One-Paragraph Pitch
+> *Meme Capsule is the anti-algorithm meme delivery app for Android and web. Instead of wasting hours doomscrolling through ad-bloated, algorithm-driven feeds, users tap one button to open a "capsule" containing a single, hand-curated, elite-tier internet meme. Built on a blazing-fast serverless edge architecture (Cloudflare D1 + R2), it combines tactile neo-brutalist visuals, zero-permission native Android storage integration, an offline Meme Vault, and an automated AI vision pre-judging pipeline to deliver instant, unfiltered humor with zero tracking and zero logins.*
 
 ---
 
-## 3. PRODUCT IDENTITY, PHILOSOPHY & VISION
+## 3. CHAPTER 2 — PRODUCT IDENTITY, VISION & PHILOSOPHY
 
-### 3.1 The Product Philosophy
-1. **The Anti-Feed Movement:** Infinite scrolling promotes mindless consumption where quantity overrides quality. By limiting the interface to one meme at a time with deliberate transitions, every meme commands full attention.
-2. **Serendipity Over Algorithmic Traps:** Algorithms optimize for outrage, controversy, and familiarity. Meme Capsule optimizes for surprise. Every drop is an unpredictable collision with the internet's humor archive.
-3. **Tactile Digital Physicality:** Modern mobile apps feel sterile, flat, and frictionless. Meme Capsule embraces heavy borders, hard offset shadows, simulated mechanical buttons, terminal logs, and haptic shakes that feel like operating a physical arcade vending machine.
-4. **Frictionless Ownership:** Great memes are meant to be kept and shared. The app treats memes as collectible assets that can be organized into personal boards and saved directly into the phone's native gallery with zero watermarks.
+### 2.1 Core Product Philosophy
+1. **One Thing, Done Perfectly:** The app does not attempt to be a social network, a messaging client, or a creator studio. Its sole purpose is dispensing top-tier memes.
+2. **Anti-Doomscroll / Discrete Consumption:** Infinite scrolling is psychologically fatiguing. Meme Capsule turns content consumption into discrete, conscious micro-actions: tap → laugh → share or move on.
+3. **Curated Quality Over Algorithmic Slop:** Algorithms prioritize engagement over quality, leading to rage-bait and copied joke formats. Meme Capsule guarantees that every meme served from its primary vault has passed human and multimodal AI editorial standards.
+4. **Absolute Privacy by Default:** Humor should not require personal data. There are no user accounts, no email collections, no phone numbers, no tracking cookies, and no behavioral profiling.
 
-### 3.2 Brand Voice & Identity
-- **Tagline:** "One Tap. One Meme. Pure Chaos." / "Your Daily Dose of Unhinged."
-- **Tone:** Unapologetic, irreverent, internet-native, high-energy, and witty.
-- **Colors:** Deep Pitch Cyber Black (`#131313`), Neon Purple (`#9b30ff`), Arcade Gold/Yellow (`#f4c300`), and Hot Magenta Pink (`#dd0061`).
-
----
-
-## 4. TARGET USERS, PERSONAS & USE CASES
-
-### 4.1 Primary Personas
-- **The Group Chat Artillery Commander (Age 16–26):**
-  - *Goal:* Needs the freshest, least-recycled memes to win group chats on WhatsApp, Discord, or Instagram DM.
-  - *Pain Point:* Searching Reddit or Instagram yields memes everyone in the chat saw three days ago.
-  - *Behavior:* Uses the `SHARE` button directly or long-presses to download to device gallery.
-- **The Micro-Break Commuter (Age 20–35):**
-  - *Goal:* Wants 2–5 minutes of genuine amusement while riding the metro or waiting in line.
-  - *Pain Point:* Opening Instagram or TikTok results in getting sucked in for 45 minutes or seeing boring sponsored content.
-  - *Behavior:* Taps `HIT ME` 10 to 15 times, laughs, and closes the app.
-- **The Mood Board Aesthetic Curator (Age 18–28):**
-  - *Goal:* Collects memes that represent very specific vibes, life situations, or tech jokes.
-  - *Pain Point:* Saved folders on social apps mix memes with recipes, travel clips, and news.
-  - *Behavior:* Creates boards like "3 AM TECH DREAD" or "MIDTERMS VIBE" and pins favorites.
+### 2.2 Brand Personality & Voice
+* **Tone:** Internet-native, chaotic yet controlled, brutally honest, tactile, slightly unhinged, irreverent.
+* **Visual Language:** Cyber-brutalist / Neo-brutalist — thick black borders (`2px - 4px`), hard offset shadows (`4px 4px 0px #f4c300`, `4px 4px 0px #dd0061`), electric neon purple (`#9b30ff`), arcade gold (`#f4c300`), hot pink (`#dd0061`), monospaced diagnostic telemetry, and retro scanline grain.
 
 ---
 
-## 5. COMPLETE FEATURE INVENTORY
+## 4. CHAPTER 3 — TARGET USERS & CORE SCENARIOS
 
-### 5.1 Core Features
-
-#### Feature 5.1.1: The "HIT ME" Primary Drop Engine
-- **Description:** The central interactive mechanism of the application. Tapping the prominent yellow button transitions the user from the waiting screen into the loading and viewing cycle.
-- **Backend Relay:** Alternates 2 backend drops from Cloudflare D1/R2 with 1 drop from Reddit (`https://meme-api.com/gimme`).
-- **Validation Pipeline:** Before presenting the meme, an image preloader verifies that the URL resolves, is a supported image MIME type (filtering `.gifv`, `v.redd.it`, and gallery links), and successfully loads within a 7-second timeout.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.2: FIFO Background Prefetch Pipeline & Swiping
-- **Description:** A background queue management system (`PIPELINE_TARGET_SIZE = 7`) that pre-fetches and preloads candidate memes ahead of time.
-- **Gestures:** Users can swipe vertically on the meme card.
-  - *Swipe Up:* Discards current meme, advances to the next preloaded meme in the queue, and triggers background queue replenishment.
-  - *Swipe Down:* Re-renders the immediately preceding meme from `memeHistory`.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.3: Arcade Hacker Loading Console
-- **Description:** An interactive loading transition featuring randomized diagnostic status logs ("HARVESTING CLOUDFLARE D1 SHARDS...", "FILTERING CRINGE FREQUENCIES..."), a neo-brutalist shimmer bar, and an erratic CSS countdown animation.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.4: Meme Vault (Local Favorites Archive)
-- **Description:** A dedicated tab allowing users to view, search, and manage memes they have bookmarked.
-- **Capabilities:** Instant real-time title search filtering, direct per-card download, direct per-card share, pin-to-board shortcut, and deletion.
-- **Storage Limits:** Free users are capped at 20 saved memes; Pro users enjoy unlimited capacity.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.5: Mood Boards ("Pinned Energy")
-- **Description:** Thematic organizational binders allowing users to curate distinct sub-collections.
-- **Capabilities:** Create boards with custom titles and color themes (`primary`, `secondary`, `tertiary`), toggle memes on/off boards from either the discovery view or the Vault, view pinned memes in a multi-column masonry layout, and delete boards.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.6: Double-Tap & Quick Emoji Reactions
-- **Description:** Visual feedback and categorization system on meme cards.
-  - *Double-Tap:* Shakes the card and triggers a retro skewed text stamp (`DANK!`, `CRINGE!`, `SO REAL`, etc.).
-  - *Emoji Bar:* Quick-access tray with 6 emojis (`💀 DEAD`, `🔥 FIRE`, `😂 LMAO`, `🗿 BRUH`, `❤️ LOVE`, `👑 KING`). Selecting an emoji pins a badge to the meme card and sends a telemetry event.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.7: Dual-Path Native Image Download
-- **Description:** Reliable gallery saving regardless of environment.
-  - *Native Android:* Uses `window.MemeCapsuleAndroid.downloadImage()` which leverages Android's `MediaStore` API to insert cleanly into `Pictures/Meme Capsule` without requiring deprecated storage write permissions.
-  - *Web / PWA:* Programmatic `Blob` URL generation and anchor click triggering.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.8: Dual-Path Native Social Sharing
-- **Description:** Effortless image sharing directly to WhatsApp, Telegram, X, etc.
-  - *Native Android:* Downloads image to the app's internal cache (`shared_images/`), retrieves a secure URI via Android `FileProvider`, and opens the system `Intent.ACTION_SEND` chooser.
-  - *Web / PWA:* Attempts Web Share API; falls back to copying the direct meme URL to clipboard.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.9: Gamified Daily Streaks
-- **Description:** Tracks consecutive days of app usage with persistent local timestamps.
-- **Status Badges:** `🌱 FRESH` (1–2 days), `⚡ RISING` (3–6 days), `🔥 ON FIRE` (7–29 days), `👑 LEGENDARY` (30–99 days), `🏆 MEME GOD` (100+ days).
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.10: Capsule Multi-Drop / Triple Drop
-- **Description:** Pack-opening style mechanic where 3 memes are pulled concurrently using `Promise.all`. The user navigates between the 3 drops via indicator pips.
-- **Access:** Reserved for Pro users or unlocked via rewarded interstitial ads.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.11: Content Safety Reporting & Local Blacklist
-- **Description:** A dedicated reporting dialog (`ReportModal.tsx`) with categorized flags (Hate Speech, NSFW, Offensive Author, Violence, Other).
-- **Local Enforcement:** Flagging a meme immediately appends its URL to `reported_memes` in `localStorage`, removes it from the user's Vault if present, skips to the next meme, and blocks it from ever loading again on that device.
-- **Remote Telemetry:** Submits a POST payload to `/api/report` for backend review.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.12: Monetization (AdMob & Native In-App Purchases)
-- **AdMob Interstitials:** Shows an interstitial ad every 4th meme viewed on native Android (bypassed for Pro).
-- **AdMob Rewarded Ads:** Provides a "BONUS DROP" for non-Pro users upon watching an ad.
-- **Pro Tier (`₹99` One-Time):** Handled via `@capgo/native-purchases` against Google Play Billing product ID `remove_ads_forever`. Unlocks zero ads, unlimited vault, and Triple Drop mode. Includes automatic purchase restoration.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.13: Silent Analytics Telemetry
-- **Description:** Client-side event buffering (`AnalyticsQueue`) that tracks user interactions without third-party tracking scripts.
-- **Batched Ingest:** Flushes queued events (`view`, `like`, `unlike`, `share`, `download`, `skip`, `long_view`, `reaction`) to Cloudflare Pages `/api/events`.
-- **Status:** **IMPLEMENTED**
-
-#### Feature 5.1.14: Admin Analytics & Aggregation Engine
-- **Description:** Cloudflare Pages functions and D1 database queries that compute global metrics, top leaderboards, virality scores, and retention analytics.
-- **Status:** **PARTIALLY IMPLEMENTED** (Backend tables, migration, and API endpoints exist; frontend admin dashboard tab is not active in `App.tsx`).
+### 3.1 Persona Profiles
+* **Persona A: "The Group Chat Dealer" (Age 18–28)**
+  * *Needs:* Fresh, unexpected memes to drop into WhatsApp, Discord, or Instagram group chats before anyone else sees them.
+  * *Pain Point:* Stale memes on Instagram Explore that everyone saw three days ago.
+  * *Meme Capsule Flow:* Opens app → hits button 3 times → finds an S-tier drop → taps native Share → sends directly to WhatsApp in under 8 seconds.
+* **Persona B: "The Micro-Breaker" (Age 22–35)**
+  * *Needs:* Fast mental refresh during a 3-minute code build, subway ride, or between study sessions.
+  * *Pain Point:* Opening TikTok or Twitter results in getting sucked into a 45-minute doomscroll session.
+  * *Meme Capsule Flow:* Opens app or website → pops 4 capsules → laughs → closes app and resumes work feeling refreshed.
+* **Persona C: "The Meme Collector" (Age 16–25)**
+  * *Needs:* Curating a personal vault of high-tier reaction images to use as situational replies.
+  * *Meme Capsule Flow:* Browses drops → favorites top gems → opens Meme Vault → searches "work" → copies/shares reaction image.
 
 ---
 
-## 6. USER EXPERIENCE & APPLICATION WORKFLOWS
+## 5. CHAPTER 4 — COMPLETE FEATURE INVENTORY
 
-### 6.1 The Core Discovery Loop
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant UI as React UI (App.tsx)
-    participant Pipeline as Prefetch Pipeline
-    participant Native as Android Native Bridge
-    participant API as Meme Capsule / Reddit API
-
-    User->>UI: Tap "HIT ME" or Swipe Up
-    alt Pipeline has memes
-        UI->>Pipeline: Pop next preloaded meme
-        Pipeline-->>UI: Verified Meme Payload
-    else Pipeline empty
-        UI->>UI: Render Arcade Hacker Loader
-        UI->>API: Fetch Candidate Meme
-        API-->>UI: Raw JSON Payload
-        UI->>UI: Preload Image DOM check (timeout 7s)
-    end
-    UI->>UI: Render Meme Card View
-    par Background Tasks
-        UI->>Pipeline: Check buffer size < 3
-        Pipeline->>API: Background fetch & preload 4-5 memes
-    and Telemetry
-        UI->>UI: Record "view" event into AnalyticsQueue
-    end
-    opt User Interacts
-        User->>UI: Double-tap meme card
-        UI->>UI: Shake animation + "DANK!" overlay + Save like
-        User->>UI: Long-press meme image (600ms)
-        UI->>Native: window.MemeCapsuleAndroid.downloadImage()
-        Native-->>User: Toast "Saved to Gallery" (Pictures/Meme Capsule)
-    end
-```
-
-### 6.2 Workflow: The Pro Upgrade Flow
-1. User taps **`GO PRO`** in the top navigation or attempts to exceed the 20-meme Vault limit.
-2. `ProUpgradeModal.tsx` opens with neon styling, feature checklist, and the ₹99 one-time price tag.
-3. User taps **`BECOME A GIGACHAD`**.
-4. The app checks `Capacitor.isNativePlatform()`. If native, it invokes `@capgo/native-purchases`:
-   - Checks billing support via `isBillingSupported()`.
-   - Validates `productIdentifiers: ['remove_ads_forever']`.
-   - Launches the native Google Play bottom sheet payment dialog.
-5. On transaction completion:
-   - Sets `is_pro` to `'true'` in `localStorage`.
-   - Closes modal, displays "💎 PRO UNLOCKED!" toast.
-   - Disables all future AdMob interstitial triggers and unlocks Triple Drop.
-
----
-
-## 7. TECHNICAL ARCHITECTURE OVERVIEW
-
-Meme Capsule uses a modern decoupled architecture: a single-page React application hosted on the edge, wrapped in an Android native container, communicating with serverless cloud functions and upstream media relays.
-
-```
-+-------------------------------------------------------------------------------+
-|                             CLIENT ARCHITECTURE                               |
-|                                                                               |
-|  +------------------------+      +------------------+      +---------------+  |
-|  |       React 19         | <--> |  AnalyticsQueue  | ---> | Preload Buffer|  |
-|  |  (App.tsx / Modals)    |      |  (Circular 200)  |      | (7 Candidates)|  |
-|  +------------------------+      +------------------+      +---------------+  |
-|              |                                                                |
-|              v (Capacitor JavaScript Bridge)                                  |
-|  +-------------------------------------------------------------------------+  |
-|  |                     Android Native (MainActivity.java)                  |  |
-|  |  - WebKit JavascriptInterface ("MemeCapsuleAndroid")                    |  |
-|  |  - MediaStore API (Scoped Storage Android 10+ Pictures/Meme Capsule)     |  |
-|  |  - FileProvider Caching & Intent.ACTION_SEND System Chooser             |  |
-|  |  - Google Play Billing Plugin (@capgo/native-purchases)                 |  |
-|  |  - Google Mobile Ads SDK (@capacitor-community/admob)                   |  |
-|  +-------------------------------------------------------------------------+  |
-+-------------------------------------------------------------------------------+
-                                       |
-                   HTTP / REST Requests (JSON)
-                                       v
-+-------------------------------------------------------------------------------+
-|                            SERVERLESS BACKEND                                 |
-|                                                                               |
-|  +-------------------------------------------------------------------------+  |
-|  |               Cloudflare Pages Functions (Edge Workers)                 |  |
-|  |  - /api/random-meme             : Curated vault delivery                |  |
-|  |  - /api/events                  : Batched silent telemetry ingest       |  |
-|  |  - /api/report                  : User content moderation submissions   |  |
-|  |  - /api/admin/analytics/*       : Aggregation, rankings, trends         |  |
-|  +-------------------------------------------------------------------------+  |
-|              |                                            |                   |
-|              v                                            v                   |
-|  +-----------------------+                    +-----------------------+       |
-|  |  Cloudflare D1 (SQL)  |                    |  Cloudflare R2 Bucket |       |
-|  |  - meme_events        |                    |  - Curated WebP/JPG   |       |
-|  |  - meme_analytics     |                    |    Assets             |       |
-|  |  - app_global_stats   |                    +-----------------------+       |
-|  +-----------------------+                                                    |
-+-------------------------------------------------------------------------------+
-                                       |
-                         External Upstream Relay (1 of 3)
-                                       v
-                     +-----------------------------------+
-                     | Reddit Meme API (meme-api.com)    |
-                     +-----------------------------------+
-```
-
----
-
-## 8. FRONTEND ARCHITECTURE & UI ENGINEERING
-
-### 8.1 Technology Stack
-- **Framework:** React 19.0.1
-- **Language:** TypeScript 5.8.2 (Strict typing across payloads)
-- **Build System:** Vite 6.2.3 with `@tailwindcss/vite`
-- **Styling:** Tailwind CSS v4 with custom `@theme` tokens in `src/index.css`
-- **Iconography:** Lucide React (`lucide-react` v0.546.0)
-
-### 8.2 Component & Directory Breakdown
-- **`src/App.tsx` (82 KB):** Central application controller. Manages state for the active tab (`home`, `favorites`, `boards`), the screen view state (`waiting`, `loading`, `viewing`, `error`), the meme object, touch swipe vectors, local favorites, mood boards, streaks, and AdMob events.
-- **`src/OnboardingModal.tsx`:** 3-step carousel modal introducing the app's zero-algorithm value proposition and swipe gestures.
-- **`src/ProUpgradeModal.tsx`:** Neo-brutalist modal handling Google Play in-app purchase flow and feature presentation.
-- **`src/ReportModal.tsx`:** Content moderation dialog for user safety compliance.
-- **`src/analytics/`:** Standalone telemetry module:
-  - `deviceId.ts`: Persistent SHA-256 device identifier generator.
-  - `analyticsTypes.ts`: Strict TypeScript interfaces for event payloads.
-  - `analyticsQueue.ts`: Circular memory buffer holding up to 200 events.
-  - `analyticsFlush.ts`: Edge-flushing logic utilizing `CapacitorHttp` (native) or `fetch` (web).
-  - `useAnalytics.ts`: React hook managing automated flush timers (60s), visibility listeners, and skip/long-view heuristics.
-
-### 8.3 State Management & Local Storage Keys
-All state persistence is handled locally via browser `localStorage`:
-| Storage Key | Data Type | Purpose |
+### 5.1 Core Mobile App Features (Implemented)
+| Feature | Description | Implementation Details |
 |---|---|---|
-| `meme_favorites` | `JSON Array<Meme>` | Full records of memes bookmarked to the user's Vault. |
-| `meme_mood_boards` | `JSON Array<MoodBoard>` | User-created custom mood board collections and pinned URLs. |
-| `liked_memes` | `JSON Array<string>` | URLs of memes that the user has liked via heart or double-tap. |
-| `meme_reactions` | `JSON Record<string, string>` | Mapping of meme URLs to user-selected emoji reactions. |
-| `total_memes_viewed` | `integer` | Counter incremented upon every meme rendered. |
-| `total_memes_fetched` | `integer` | Counter tracking total requests made to discovery endpoints. |
-| `reported_memes` | `JSON Array<string>` | Permanent local blacklist of URLs flagged by the user. |
-| `streak_count` | `integer` | Current consecutive day count. |
-| `streak_last_date` | `string (YYYY-MM-DD)` | Last recorded active date for streak recalculation. |
-| `is_pro` | `'true' \| 'false'` | Local flag indicating unlocked Pro lifetime status. |
-| `has_seen_onboarding` | `'true' \| 'false'` | Controls initial launch onboarding modal visibility. |
-| `meme_capsule_device_id`| `string (hex SHA-256)` | Unique pseudo-anonymous identifier for analytics events. |
+| **Capsule Dispenser ("HIT ME")** | Primary action triggering discrete random meme fetch and reveal animation. | `src/App.tsx`, CSS keyframe recoil, stateful drop tracking. |
+| **Hacker Loading Console** | Interactive cybernetic telemetry screen displayed during API fetch. | Rotates diagnostic logs and erratic numeric strings (`42.00`, `ERR`, `69.69`). |
+| **Tactile Reaction Stamps** | Double-tap interaction stamping visual reactions on meme card. | Stamps: `DANK!`, `CRINGE!`, `SO REAL`, `GIGA DANK`, `EPIC!`. Recoil shake via `.animate-shake`. |
+| **Native MediaStore Downloader** | Direct save to Android system gallery without permissions prompt. | Android Java bridge (`MainActivity.java`) using Android 10+ `MediaStore.Images.Media`. |
+| **Native Android Share Sheet** | One-tap sharing to third-party messaging apps. | Android `Intent.ACTION_SEND` using `FileProvider` cached URI streams. |
+| **Meme Vault (Offline Favorites)** | Persistent personal gallery with search and stats. | Stored in `localStorage` under `meme_favorites`, `liked_memes`, `total_memes_viewed`. |
+| **Alternating Feed Engine** | Dynamic traffic distributor ensuring content freshness. | Serves Cloudflare D1/R2 on primary hits; routes every 3rd call to Reddit API with SFW filter. |
+| **Dev Joke Ticker** | Background humor ticker rotating engineering quips. | Cycles array of witty tech jokes every 12 seconds. |
+| **Google AdMob Monetization** | Non-intrusive interstitial ad support. | Triggers full-screen ad every 4th meme viewed via `@capacitor-community/admob`. |
 
----
-
-## 9. ANDROID NATIVE BRIDGE & PACKAGING
-
-### 9.1 Capacitor Configuration (`capacitor.config.json`)
-```json
-{
-  "appId": "com.meme.capsule",
-  "appName": "Meme Capsule",
-  "webDir": "dist"
-}
-```
-
-### 9.2 Android Native Bridge (`MainActivity.java`)
-Meme Capsule uses a custom Java bridge class (`MemeCapsuleDownloads`) registered into the Capacitor WebView via `addJavascriptInterface` under the global identifier `window.MemeCapsuleAndroid`.
-
-#### Key Responsibilities of `MainActivity.java`:
-1. **Edge-to-Edge Display (Android 15+ Compatibility):**
-   Calls `androidx.activity.EdgeToEdge.enable(this)` and configures `ViewCompat.setOnApplyWindowInsetsListener` to ensure content respects system status bars and navigation cutouts.
-2. **Notch / Display Cutout Handling:**
-   Sets `WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT` on Android 9+.
-3. **MediaStore Gallery Downloader:**
-   - On Android 10+ (API 29+), downloads images on a background worker thread and uses `ContentResolver` to insert into `MediaStore.Images.Media.EXTERNAL_CONTENT_URI` with `RELATIVE_PATH = "Pictures/Meme Capsule"`.
-   - Utilizes `IS_PENDING = 1` during the stream write and sets `IS_PENDING = 0` on completion, preventing corrupted images from appearing in the gallery.
-   - **Zero runtime storage permissions required** on modern Android devices.
-4. **FileProvider Image Sharing:**
-   - Downloads the target image into `context.getCacheDir()/shared_images/`.
-   - Translates the file into a secure content URI using `androidx.core.content.FileProvider.getUriForFile()`.
-   - Launches an `Intent.ACTION_SEND` chooser granting temporary `FLAG_GRANT_READ_URI_PERMISSION`.
-
-### 9.3 Android Manifest & Permissions (`AndroidManifest.xml`)
-- `android.permission.INTERNET`: Required for fetching meme assets and API data.
-- `android.permission.WRITE_EXTERNAL_STORAGE` (`android:maxSdkVersion="28"`): Preserved only for legacy Android 9 and older devices.
-- `com.android.vending.BILLING`: Required for Google Play in-app purchase processing.
-- `com.google.android.gms.ads.APPLICATION_ID`: Registered with AdMob App ID `ca-app-pub-2093403233028868~8795588038`.
-
----
-
-## 10. BACKEND ARCHITECTURE & CLOUDFLARE SERVERLESS
-
-Meme Capsule utilizes Cloudflare's serverless edge infrastructure to provide global low-latency responses without managing server infrastructure.
-
-### 10.1 Cloudflare Endpoints
-| Endpoint | Method | Path in Codebase | Description |
-|---|---|---|---|
-| `/api/random-meme` | `GET` | Upstream Cloudflare Pages | Returns a random curated meme record from Cloudflare D1 and R2. |
-| `/api/events` | `POST` | `functions/api/events.ts` | Ingests batched client telemetry events into D1 table `meme_events`. |
-| `/api/admin/analytics/overview` | `GET` | `functions/api/admin/analytics/overview.ts` | Returns global counters, top 5 leaderboards, and distribution metrics. |
-| `/api/admin/analytics/recalculate` | `POST` | `functions/api/admin/analytics/recalculate.ts` | Manually triggers aggregation from `meme_events` into `meme_analytics`. |
-| `/api/report` | `POST` | Upstream Cloudflare Pages | Receives user moderation reports for flagged memes. |
-
----
-
-## 11. DATABASE, SCHEMAS & DATA MODELING
-
-The backend data layer is powered by **Cloudflare D1** (distributed SQLite at the edge).
-
-### 11.1 D1 Analytics Schema (`d1/migrations/002_analytics.sql`)
-
-```sql
--- Table: meme_events (Raw Telemetry Stream)
-CREATE TABLE IF NOT EXISTS meme_events (
-  id              INTEGER PRIMARY KEY AUTOINCREMENT,
-  meme_id         TEXT NOT NULL,
-  event_type      TEXT NOT NULL,
-  session_id      TEXT NOT NULL,
-  device_id       TEXT NOT NULL,
-  time_on_meme_ms INTEGER DEFAULT 0,
-  timestamp       INTEGER NOT NULL,
-  FOREIGN KEY (meme_id) REFERENCES memes(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_meme_events_meme_id ON meme_events(meme_id);
-CREATE INDEX IF NOT EXISTS idx_meme_events_event_type ON meme_events(event_type);
-CREATE INDEX IF NOT EXISTS idx_meme_events_timestamp ON meme_events(timestamp);
-CREATE INDEX IF NOT EXISTS idx_meme_events_device_id ON meme_events(device_id);
-
--- Table: meme_analytics (Aggregated Performance & Rankings)
-CREATE TABLE IF NOT EXISTS meme_analytics (
-  meme_id               TEXT PRIMARY KEY,
-  view_count            INTEGER DEFAULT 0,
-  unique_viewer_count   INTEGER DEFAULT 0,
-  like_count            INTEGER DEFAULT 0,
-  unlike_count          INTEGER DEFAULT 0,
-  net_like_count        INTEGER DEFAULT 0,
-  share_count           INTEGER DEFAULT 0,
-  download_count        INTEGER DEFAULT 0,
-  skip_count            INTEGER DEFAULT 0,
-  long_view_count       INTEGER DEFAULT 0,
-  re_fetch_count        INTEGER DEFAULT 0,
-  avg_time_on_meme_ms   REAL DEFAULT 0,
-  max_time_on_meme_ms   INTEGER DEFAULT 0,
-  engagement_score      REAL DEFAULT 0,
-  virality_score        REAL DEFAULT 0,
-  retention_score       REAL DEFAULT 0,
-  skip_rate             REAL DEFAULT 0,
-  like_rate             REAL DEFAULT 0,
-  share_rate            REAL DEFAULT 0,
-  download_rate         REAL DEFAULT 0,
-  overall_rank          INTEGER DEFAULT 0,
-  like_rank             INTEGER DEFAULT 0,
-  share_rank            INTEGER DEFAULT 0,
-  virality_rank         INTEGER DEFAULT 0,
-  retention_rank        INTEGER DEFAULT 0,
-  engagement_rank       INTEGER DEFAULT 0,
-  trending_score        REAL DEFAULT 0,
-  trending_rank         INTEGER DEFAULT 0,
-  first_seen_at         INTEGER,
-  last_seen_at          INTEGER,
-  last_aggregated_at    INTEGER,
-  FOREIGN KEY (meme_id) REFERENCES memes(id)
-);
-
--- Table: app_global_stats (Single-row Key-Value Metrics)
-CREATE TABLE IF NOT EXISTS app_global_stats (
-  stat_key    TEXT PRIMARY KEY,
-  stat_value  REAL NOT NULL,
-  updated_at  INTEGER NOT NULL
-);
-```
-
----
-
-## 12. APIS, NETWORK PROTOCOLS & EXTERNAL INTEGRATIONS
-
-### 12.1 Content Sourcing Protocol
-Meme Capsule executes an alternating discovery algorithm:
-- **Condition `totalMemesViewed % 3 === 0`:** Requests public Reddit meme endpoint `https://meme-api.com/gimme`.
-  - *Sanitization:* Drops any payload where `nsfw === true` or `spoiler === true`.
-  - *Validation:* Drops URLs containing `.gifv`, `v.redd.it` (video streams), or `/gallery/` (multi-image albums).
-  - *Fallback:* If Reddit fails or is dropped, immediately falls back to `/api/random-meme`.
-- **Default Condition:** Queries `https://meme-capsule-eww.pages.dev/api/random-meme`.
-
-### 12.2 CORS & Native Network Handling
-Browsers enforce strict CORS restrictions on direct image downloading and third-party API queries. In native Android mode, the app uses **`CapacitorHttp`**, which routes HTTP traffic through native Android networking libraries (`HttpURLConnection`), completely bypassing WebView CORS limitations.
-
----
-
-## 13. AI / MACHINE LEARNING SYSTEMS ANALYSIS
-
-### 13.1 Intentional Absence of Algorithmic Curation
-Meme Capsule is built as an explicit counterweight to AI-driven recommendation feeds:
-- **Zero Algorithmic Filtering:** Memes are served via randomized database sampling and round-robin relays. No collaborative filtering, vector embeddings, or user profiling is applied to dictate feed order.
-- **Why?** Preserving true serendipity and surprise is the product's core value proposition.
-
-### 13.2 Artifacts in Codebase vs. Reality
-- `package.json` lists `@google/genai` (`^1.29.0`) and `vite.config.ts` defines `process.env.GEMINI_API_KEY`.
-- **Reconciliation:** These dependencies are remnants from the initial Google AI Studio template scaffolding. They are **not imported or used** in the production runtime code.
-
----
-
-## 14. SECURITY, PRIVACY, CONTENT MODERATION & PERMISSIONS
-
-### 14.1 User Privacy & Data Minimization
-- **No User Accounts:** Meme Capsule requires no login, email, phone number, or profile creation.
-- **Device Anonymization:** Telemetry device IDs are generated client-side using `crypto.subtle.digest('SHA-256')` over a local UUID, ensuring no hardware identifiers (like IMEI or Android ID) are gathered.
-- **Local Isolation:** Favorites, mood boards, and interaction histories remain stored solely on the client device inside `localStorage`.
-
-### 14.2 Content Moderation & Google Play Compliance
-Because the app pulls content from public repositories (Reddit), strict compliance with Google Play's User Generated Content (UGC) policy is required:
-1. **Automated Filters:** Strict dropping of NSFW and spoiler flags.
-2. **In-App Report System:** Every meme card features a report button (`ReportModal.tsx`).
-3. **Instant Local Blacklisting:** Submitting a report immediately purges the meme from the user's feed and saves the URL to `reported_memes` in local storage, preventing it from ever being rendered again.
-
----
-
-## 15. ADMIN, ANALYTICS & TELEMETRY PIPELINE
-
-### 15.1 Silent Event Pipeline Flow
-```
-User Action (View / Skip / Like / Share / Download)
-  │
-  ▼
-AnalyticsQueue.enqueue() [Circular Memory Buffer, Max 200]
-  │
-  ├─► Flushed every 60s
-  ├─► Flushed immediately if queue size > 100
-  └─► Flushed on document.visibilityState === 'hidden'
-  │
-  ▼
-flushQueue() via CapacitorHttp (Native) or fetch (Web)
-  │
-  ▼
-Cloudflare Pages Function: POST /api/events
-  │
-  ▼
-Cloudflare D1 Batch Insert (meme_events)
-```
-
-### 15.2 Calculated Metrics
-- **Skip Rate:** Calculated when a user views a meme for less than 2,000 milliseconds before advancing.
-- **Long View Rate:** Recorded when a user stays on a meme for greater than 10,000 milliseconds.
-- **Engagement Score:** Composite formula weighing net likes, shares, downloads, and completion rates against total impressions.
-
----
-
-## 16. UI/UX DESIGN SYSTEM & CYBER-BRUTALIST AESTHETIC
-
-### 16.1 Design Tokens (`src/index.css`)
-- **Background:** Pitch Cyber Black (`#131313`)
-- **Surfaces:** Charcoal (`#1c1b1b` low, `#201f1f` mid, `#2a2a2a` high, `#353534` highest)
-- **Primary Accent:** Neon Purple (`#9b30ff`)
-- **Secondary Accent:** Arcade Gold/Yellow (`#f4c300`)
-- **Tertiary Accent:** Hot Magenta Pink (`#dd0061`)
-- **Text:** Crisp Warm White (`#e5e2e1`)
-
-### 16.2 Typography Hierarchy
-- **Headlines:** `Anton` (Ultra-heavy condensed display font; all caps)
-- **Labels, Buttons & Numbers:** `Oswald` (Clean, mechanical sans-serif)
-- **Body & Captions:** `Chivo` (High-legibility sans-serif)
-
-### 16.3 Tactile Physicality
-- **Borders:** Consistent `3px` to `4px` solid dark borders.
-- **Shadows:** Hard offset rectangular drop shadows (`4px 4px 0px 0px #000` or neon colors) with zero blur radius.
-- **Active States:** Buttons physically displace on tap (`active:translate-x-0.5 active:translate-y-0.5 active:shadow-none`).
-
----
-
-## 17. PROJECT TERMINOLOGY & DOMAIN GLOSSARY
-
-- **Capsule Drop:** A single, discrete meme payload fetched and displayed to the user.
-- **Meme Vault:** The client-side local archive where a user's favorited memes reside.
-- **Mood Board:** A user-created thematic collection of pinned memes with customized color styles.
-- **Triple Drop:** A premium pack-opening feature that queries and displays 3 memes concurrently.
-- **MemeCapsuleAndroid:** The custom Java bridge injected into WebKit facilitating MediaStore gallery saving.
-- **Erratic Counter:** A simulated CSS decryption timer cycling arbitrary numeric tokens (`03.14`, `ERR`, `69.69`).
-- **Prefetch Pipeline:** The background FIFO buffer maintaining up to 7 validated meme images in memory.
-
----
-
-## 18. CURRENT IMPLEMENTATION STATUS MATRIX
-
-| System / Feature | Status | Code Evidence | Notes |
-|---|---|---|---|
-| Single-Tap Meme Drop | **IMPLEMENTED** | `src/App.tsx:1222` | Core "HIT ME" workflow active. |
-| Dual-Source Relay (D1/Reddit) | **IMPLEMENTED** | `src/App.tsx:491` | Alternates 2 D1 drops with 1 Reddit drop. |
-| Image Preloading & Validation | **IMPLEMENTED** | `src/App.tsx:457` | Validates image DOM load within 7s timeout. |
-| FIFO Prefetch Pipeline (7 items)| **IMPLEMENTED** | `src/App.tsx:254` | Fills buffer when queue size drops below 3. |
-| Vertical Swipe Gestures | **IMPLEMENTED** | `src/App.tsx:594` | Touch handler with scale/translation feedback. |
-| Double-Tap Card Reactions | **IMPLEMENTED** | `src/App.tsx:1310` | Shakes card and overlays visual reaction text. |
-| Quick Emoji Reaction Tray | **IMPLEMENTED** | `src/App.tsx:565` | 6 selectable emojis saved to `localStorage`. |
-| Meme Vault (Favorites) | **IMPLEMENTED** | `src/App.tsx:1595` | Local favorites list with real-time text search. |
-| Custom Mood Boards | **IMPLEMENTED** | `src/App.tsx:1646` | Multi-board pinning and masonry rendering. |
-| Native Android MediaStore Save | **IMPLEMENTED** | `MainActivity.java:76`| Cleanly saves to `Pictures/Meme Capsule`. |
-| Native Android FileProvider Share| **IMPLEMENTED** | `MainActivity.java:132`| System chooser image sharing via cache dir. |
-| Daily Streaks & Rank Titles | **IMPLEMENTED** | `src/App.tsx:318` | Daily tracking from `🌱 FRESH` to `🏆 MEME GOD`.|
-| Triple Drop Mode | **IMPLEMENTED** | `src/App.tsx:1076` | Concurrently fetches 3 memes for Pro users. |
-| Content Reporting & Blacklist | **IMPLEMENTED** | `ReportModal.tsx` | Submits report and immediately blacklists locally. |
-| AdMob Interstitials & Rewards | **IMPLEMENTED** | `src/App.tsx:400` | Interstitial every 4th meme; Rewarded bonus. |
-| Native Google Play In-App Purchase| **IMPLEMENTED**| `ProUpgradeModal.tsx` | `@capgo/native-purchases` for `remove_ads_forever`.|
-| Silent Analytics Telemetry | **IMPLEMENTED** | `src/analytics/` | Circular queue, auto-flush to `/api/events`. |
-| Cloudflare D1 Event Ingest | **IMPLEMENTED** | `functions/api/events.ts`| Batch inserts events into `meme_events`. |
-| Cloudflare D1 Aggregations | **IMPLEMENTED** | `functions/api/admin/...`| Endpoints calculate overview and rankings. |
-| PIN-Gated Admin Dashboard UI | **OUTDATED / SUPERSEDED**| `README.md:11` | Mentioned in README, but omitted from `App.tsx`. |
-| Generative AI Integration | **NOT IMPLEMENTED** | `package.json:20` | Remnant from Google AI Studio template. |
-
----
-
-## 19. ROADMAP, PLANNED FEATURES & TECHNICAL DEBT
-
-### 19.1 Planned Features (Product Expansion)
-- **User Meme Submissions:** Enable community meme uploads directly to Cloudflare R2 via presigned URLs.
-- **Cloud Account Sync:** Optional cross-device vault backup via lightweight Passkey/OAuth authentication.
-- **Shared Collaborative Boards:** Shareable web links to public mood boards (`memecapsule.wtf/b/:id`).
-- **Sound Effects (SFX):** Audio clicks, arcade thuds, and drop sounds using Web Audio API.
-
-### 19.2 Technical Debt
-- **Single Monolithic App Component:** `src/App.tsx` spans over 1,700 lines. It should be refactored into smaller sub-components (`MemeCard`, `VaultView`, `BoardsView`, `Header`).
-- **Admin Tab Disconnect:** The admin analytics endpoints exist on Cloudflare, but there is no accessible frontend UI route to inspect them.
-
----
-
-## 20. KNOWN ISSUES, BUGS, LIMITATIONS & OPEN QUESTIONS
-
-1. **Service Worker Legacy Conflicts:**
-   - *Symptom:* `logs.md` reveals hundreds of `Failed to fetch` errors originating from an old service worker (`sw.js`).
-   - *Mitigation:* `src/main.tsx` now explicitly invokes `navigator.serviceWorker.getRegistrations()` and unregisters all active workers on startup.
-2. **Reddit Image Reliability:**
-   - Public Reddit memes occasionally return deleted image stubs or unsupported galleries. The client-side `fetchValidMeme` preloader mitigates this with up to 10 automated retries before displaying an error.
-3. **Google Play UGC Requirements:**
-   - Production launch requires continuous verification that reported memes are reviewed and removed from upstream D1 storage.
-
----
-
-## 21. DEVELOPMENT HISTORY, DEBUGGING LOG & ARCHITECTURAL DECISIONS
-
-### 21.1 Important Architectural Decisions
-- **Why Capacitor over React Native?** The web codebase was originally built and styled using modern web technologies (Vite + Tailwind v4 + CSS Grid). Capacitor allowed the team to package the exact pixel-perfect Neo-Brutalist design into an Android APK without rewriting the entire UI layer in React Native primitives.
-- **Why a Custom Java Bridge for Downloads?** Web standard `fetch()` and `blob:` downloads frequently fail inside Android WebViews due to scoped storage restrictions. Inscribing `MemeCapsuleAndroid` directly into `MainActivity.java` allowed seamless background streaming into Android's `MediaStore` without prompting the user for dangerous filesystem permissions.
-- **Why Zero AI in Curation?** Algorithmic feeds destroy the element of surprise. Hand-picked and randomized community feeds create higher emotional variance and excitement.
-
----
-
-## 22. PRODUCT DIFFERENTIATION & KEY CHARACTERISTICS
-
-| Characteristic | Generic Meme Browsers | Meme Capsule |
+### 5.2 Serverless Backend & Admin Features (Implemented)
+| Feature | Description | Implementation Details |
 |---|---|---|
-| **Feed Type** | Infinite vertical list scroll | Single-item capsule drops |
-| **Curation Method** | Algorithmic engagement sorting | Random serendipity & hand-picked archives |
-| **Visual Aesthetic** | Generic dark/light mode | High-voltage Neo-Brutalist Cyberpunk |
-| **Saving Mechanics** | Screenshots or cluttered folders | Organized Vault & custom Mood Boards |
-| **Gallery Download** | Watermarked or broken in WebView | Native Scoped MediaStore integration |
-| **Data Privacy** | Heavy tracking & mandatory accounts | Anonymous, zero account required |
+| **Random Meme Route** | Public edge route serving random active meme. | `functions/api/random-meme.ts` querying Cloudflare D1 with CORS headers. |
+| **Daily Drop Route** | Public edge route serving deterministic daily pick. | `functions/api/daily-meme.ts` using UTC date seed for consistent daily delivery. |
+| **Admin Metadata API** | Protected CRUD operations for meme database. | `functions/api/admin/memes.ts` with `ADMIN_API_TOKEN` bearer validation. |
+| **R2 Storage Upload API** | Binary upload endpoint for media files. | `functions/api/admin/upload.ts` streaming multipart files directly into R2 bucket. |
+| **R2-to-D1 Batch Sync** | Automated cataloging of untracked storage files. | `functions/api/admin/sync-r2.ts` scanning R2 keys and generating missing D1 rows. |
+| **Report Moderation API** | Public reporting and admin resolution system. | `functions/api/report.ts` managing user reports, soft-deletions, and blacklist additions. |
+
+### 5.3 Web Platform & Promotional Site Features (Implemented)
+| Feature | Description | Implementation Details |
+|---|---|---|
+| **Interactive Live Drop Preview** | Functional web simulator with 5-drop quota counter. | `src/components/MemePreview.tsx` calling live edge API with fallback recovery. |
+| **Quota Depletion Bumper** | Conversion modal locking preview after 5 drops. | Overlay prompting Google Play install with custom UTM campaign tracking. |
+| **Google AdSense (Unit meme1)** | Monetization banner below live preview. | `AdBanner.tsx` embedding unit `6291908699` (client `ca-pub-2093403233028868`). |
+| **3D Realistic Phone Mockups** | Interactive Android device mockups with tilt physics. | `src/components/Screenshots.tsx` using 3D perspective transforms on cursor hover. |
+| **Authentic WebP Screenshots** | Real Android app captures replacing placeholders. | 5 WebP/JPEG pairs: Home, Loading, Loaded, Vault, Mood Boards. |
+| **Full Lightbox Zoom Modal** | High-resolution screenshot viewer with keyboard controls. | Lightbox modal with next/prev navigation and backdrop blur. |
+| **Preloader Experience** | Full-screen entrance transition with animated bar. | `Preloader.tsx` featuring official brand logo and `.pre-bar` progress. |
+| **Custom Magnetic Cursor** | Circular pointer following mouse with hover expansion. | `CustomCursor.tsx` with `.cur-dot` and enlarged `.cur-dot.act` state. |
+| **Film Grain & Vignette Layers** | Atmospheric overlay giving CRT arcade texture. | `GrainOverlay.tsx` (GPU accelerated) and `Vignette.tsx`. |
+| **Desktop Scroll Rail** | Fixed vertical navigation bar indicating section progress. | `ScrollRail.tsx` highlighting active section dots. |
+| **Acid / Glitch Mode Toggle** | Cyberpunk theme switch with chromatic aberration. | `Navbar.tsx` injecting `html.theme-glitch` filter class into DOM. |
+| **Section 04.5 Under the Hood** | Technical transparency block detailing curation. | `HowItWorksDetail.tsx` explaining 5,000+ library, Reddit feed, and data policy. |
+| **Expanded 15-Question FAQ** | Search-optimized accordion answering user questions. | `FAQ.tsx` and `constants/faq.ts` paired with `FAQPage` JSON-LD schema. |
+| **Dedicated About & Press Kit** | Official entity definition, copy kit, and brand assets. | `src/pages/About.tsx` with one-liner copy kit and download buttons. |
+| **Dedicated Privacy Policy Page** | Google Play and GDPR compliant privacy terms. | `src/pages/Privacy.tsx` and static fallback `public/privacy.html`. |
+| **Formspree Feedback Form** | Serverless contact form with mandatory privacy consent. | `ContactForm.tsx` posting to Formspree ID `xwlenwzr`. |
+| **Deterministic Pre-rendering** | Static HTML generation for search engine indexability. | `vite-plugin-prerender` with deterministic `ReactSSRRenderer`. |
 
 ---
 
-## 23. CONTENT-READY PROJECT DESCRIPTIONS
+## 6. CHAPTER 5 — USER EXPERIENCE & APPLICATION WORKFLOWS
 
-### One-Sentence Description
-> Meme Capsule is a high-octane Android meme discovery app that delivers curated internet humor one tap at a time with zero algorithms and zero doomscrolling.
-
-### Short Description (App Store / Play Console)
-> Tired of doomscrolling through the same recycled jokes? Meme Capsule kills the algorithm. Tap HIT ME to get a random, hand-picked meme dropped straight to your screen. Save your favorites to your personal Meme Vault, organize chaos into custom Mood Boards, and download or share instantly to WhatsApp with zero watermarks. One tap. One meme. Pure chaos.
-
-### Detailed Description (Marketing / Website)
-> The internet used to be fun. Now it's an algorithmically optimized hamster wheel showing you the same five video formats and brand sponsorships. 
-> 
-> **Meme Capsule** was built to take the internet back. We combined the punchy tactile energy of an arcade cabinet with a curated archive of the finest humor the web has to offer. With a single tap, Meme Capsule drops a fresh, unhinged meme directly onto your screen. No infinite feeds. No account setup. No tracking. Double-tap to react, swipe up for the next drop, pin your favorites to themed mood boards, or beam them directly to your group chats. Stop scrolling. Start dropping.
-
----
-
-## 24. AI-HANDOFF & PORTABLE AGENT CONTEXT
-
-> [!TIP]
-> Copy and paste this standalone block directly into any new AI prompt to provide complete architectural and product context.
+### 6.1 Primary Mobile App Workflow (Dispenser Loop)
 
 ```text
-=== PORTABLE CONTEXT: MEME CAPSULE ===
-APP NAME: Meme Capsule (Android Package: com.meme.capsule)
-CORE CONCEPT: Anti-algorithm, mobile-first random meme discovery app with an Arcade / Cyber-Brutalist aesthetic. One tap delivers one curated meme. No infinite feeds.
-TECH STACK:
-- Frontend: React 19, TypeScript, Vite 6, Tailwind CSS v4 (@theme in src/index.css), Lucide React.
-- Mobile: Capacitor 8 Android container. Custom MainActivity.java with injected JavascriptInterface "window.MemeCapsuleAndroid" for native MediaStore downloads (Pictures/Meme Capsule) and FileProvider intent sharing.
-- Backend: Cloudflare Pages serverless functions (functions/api/events.ts, overview.ts, recalculate.ts), Cloudflare D1 (SQLite database), Cloudflare R2 (object storage).
-- Monetization: @capacitor-community/admob (interstitials every 4th meme, rewarded bonus drops) and @capgo/native-purchases (product: "remove_ads_forever" at ₹99).
-KEY PATHS:
-- src/App.tsx: Main application logic, prefetch pipeline, gestures, favorites, mood boards, monetization.
-- src/index.css: Neo-brutalist theme tokens, keyframe animations, typography (Anton, Oswald, Chivo).
-- src/analytics/: Client telemetry queue (AnalyticsQueue) that buffers events and flushes to /api/events.
-- android/app/src/main/java/com/meme/capsule/MainActivity.java: Native Android bridge.
-CRITICAL RULES & CONSTRAINTS:
-1. DESIGN INTEGRITY: Maintain neo-brutalist styling (thick 3-4px borders, hard offset shadows, high-contrast neon purple #9b30ff, yellow #f4c300, pink #dd0061, Anton headlines). Never use soft rounded pastel buttons.
-2. NO ALGORITHMS: Do not add algorithmic feed sorting; serendipity is the core product identity.
-3. NATIVE COMPATIBILITY: Preserve window.MemeCapsuleAndroid compatibility in MainActivity.java when modifying download/share flows.
-4. CORS AWARENESS: Native Android uses CapacitorHttp to bypass browser CORS; keep fallbacks intact for web environments.
-=======================================
+[App Launch]
+     │
+     ▼
+[Hero Screen: "HIT ME" Button Idle]
+     │ (User Taps Button)
+     ▼
+[Hacker Loading Console Appears]
+     ├─ Runs diagnostic text: "CHECKING REDDIT RELAY...", "HARVESTING D1 SHARDS..."
+     ├─ Erratic counter scrambles numbers
+     └─ Initiates background fetch:
+          ├─ If (viewCount % 3 === 0) ──► Query Reddit meme API (Validate SFW)
+          └─ Else ──────────────────────► Query Cloudflare D1 /api/random-meme
+     │
+     ▼
+[Capsule Reveals Meme Card]
+     ├─ Shows Rarity Badge ("Epic", "Common", "Rare")
+     ├─ Displays Category Tag ("Relatability", "Internet Culture")
+     └─ Primary CTA changes label to: "SPAWN ANOTHER"
+     │
+     ├───────────────────────┬──────────────────────┬──────────────────────┐
+     ▼                       ▼                      ▼                      ▼
+[Double-Tap Card]      [Tap SAVE IT]         [Tap SHARE]           [Tap FAVORITE]
+     │                       │                      │                      │
+     ▼                       ▼                      ▼                      ▼
+Trigger Haptic Recoil  Native Java Bridge     Native Share Sheet     Persist to Vault
+& Emoji Stamp:         Downloads to MediaStore Opens OS Chooser      Update LocalStorage
+"SO REAL" / "DANK!"    Pictures/Meme Capsule  (WhatsApp / Insta)     Increment Counter
+```
+
+### 6.2 Web Platform User Workflow (Preview & Conversion Loop)
+
+```text
+[Visitor Lands on memecapsule.wtf]
+     │
+     ├─ Preloader plays 0.8s logo sequence
+     ├─ Atmosphere initializes: Custom Cursor + Film Grain + Vignette + Scroll Rail
+     │
+     ▼
+[Hero Section]
+     ├─ Branded Anton Headline & Subtitle
+     ├─ Direct Google Play Download CTA (Fires GA4 Conversion Event)
+     │
+     ▼
+[Section 01: Live Meme Drop Simulator]
+     ├─ User taps "HIT ME"
+     ├─ Fetches /api/random-meme (Curated R2 fallback on error)
+     ├─ Quota drops remaining counter decrements (5 -> 4 -> 3 -> 2 -> 1 -> 0)
+     ├─ After 5 drops: Capsule Depleted Lockout Bumper covers card
+     │    └─ CTA: "Get It on Google Play" with UTM attribution
+     ├─ AdSense Banner unit "meme1" displays below card
+     │
+     ▼
+[Section 02 & 03: Features & 3D Interactive Screenshots]
+     ├─ User hovers phone mockups -> 3D perspective tilt activates
+     ├─ User clicks mockup -> Fullscreen Lightbox Zoom opens (WebP high-res)
+     │
+     ▼
+[Section 04 & 04.5: How It Works & Under the Hood]
+     ├─ 3-step mechanical guide
+     ├─ Honest technical breakdown: The Meme Library, Reddit Feed, Data Transparency
+     │
+     ▼
+[Section 05, 06, 07: Changelog, 15-Question FAQ, Contact Form]
+     ├─ Changelog: v1.0.0 Launch record
+     ├─ Accordion FAQ: 15 search-intent answers
+     └─ Contact Form: Formspree submission with mandatory Privacy Consent checkbox
+     │
+     ▼
+[Subpage Navigation: /about & /privacy]
+     ├─ /about: Entity definition, Quick Facts, Press Kit copy kit, Download Logo/Banner
+     └─ /privacy: Store-compliant disclosures (analytics, ads, zero personal data)
 ```
 
 ---
 
-## 25. FINAL MASTER SUMMARY
+## 7. CHAPTER 6 — HOLISTIC TECHNICAL ARCHITECTURE
 
-**Meme Capsule** represents a deliberate, high-craft rebellion against algorithmic feed fatigue. By synthesizing an irreverent cyber-brutalist aesthetic with native mobile performance and edge-based serverless infrastructure, the application achieves a unique identity in the mobile entertainment category.
+Meme Capsule uses a modern, multi-tier decoupled architecture:
 
-### Core Mental Model for New Developers and Agents:
-1. **The Product Identity:** An arcade vending machine for internet culture. Tapping `HIT ME` delivers immediate gratification with zero friction.
-2. **The Client Pipeline:** A proactive prefetch queue ensures the user never experiences loading delays during swipe navigation.
-3. **The Native Bridge:** Crucial file operations (downloading to the Android gallery and launching system share dialogs) are offloaded to native Java via `window.MemeCapsuleAndroid` to ensure 100% compliance with Android 10+ scoped storage.
-4. **The Codebase State:** The client application, native Android project, and backend event telemetry are fully operational. The primary remaining technical task is modularizing `App.tsx` and connecting the backend admin analytics dashboards.
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                     CLIENT TIERS                                       │
+│                                                                                        │
+│   ┌─────────────────────────────────────┐      ┌───────────────────────────────────┐   │
+│   │       ANDROID APP (Capacitor 8)     │      │   PROMO WEBSITE (memecapsule.wtf) │   │
+│   │  React 19 / TypeScript / Tailwind   │      │ React 18 / Tailwind / GitHub Pages│   │
+│   │  Java Bridge (MainActivity.java)    │      │ Multi-Page SPA / Static Prerender │   │
+│   │  Google AdMob Interstitial SDK      │      │ Google AdSense (Slot 6291908699)  │   │
+│   └──────────────────┬──────────────────┘      └─────────────────┬─────────────────┘   │
+└──────────────────────┼───────────────────────────────────────────┼─────────────────────┘
+                       │                                           │
+                       │ Calls /api/random-meme                    │ Calls /api/random-meme
+                       ▼                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              EDGE SERVERLESS BACKEND                                   │
+│                        (Cloudflare Pages Functions / V8 Engine)                        │
+│                                                                                        │
+│     ┌────────────────────────┐  ┌────────────────────────┐  ┌───────────────────────┐  │
+│     │ GET /api/random-meme   │  │ GET /api/daily-meme    │  │ POST /api/report      │  │
+│     └───────────┬────────────┘  └───────────┬────────────┘  └───────────┬───────────┘  │
+│                 │                           │                           │              │
+│                 │ Preflight & GET with CORS │                           │              │
+│                 │ Access-Control-Allow-Origin: *                        │              │
+│                 │ Cache-Control: no-cache, no-store                     │              │
+└─────────────────┼───────────────────────────┼───────────────────────────┼──────────────┘
+                  │                           │                           │
+                  ▼                           ▼                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                STORAGE & DATA LAYERS                                   │
+│                                                                                        │
+│   ┌──────────────────────────────────────┐    ┌────────────────────────────────────┐   │
+│   │       CLOUDFLARE D1 (SQLite)         │    │      CLOUDFLARE R2 (CDN Storage)   │   │
+│   │  Tables: memes, reports, blacklist   │    │  Bucket: memes (Zero Egress CDN)   │   │
+│   │  Indexed random_key for O(1) query   │    │  WebP / JPG / PNG Assets           │   │
+│   └──────────────────────────────────────┘    └────────────────────────────────────┘   │
+└───────────────────────────────────────────────────▲────────────────────────────────────┘
+                                                    │ Ingests / Categorizes
+┌───────────────────────────────────────────────────┴────────────────────────────────────┐
+│                             AI PRE-JUDGE PIPELINE                                      │
+│               Python Runner + NVIDIA NIM (Llama 3.2 11B Vision)                        │
+│            Classifies Topics, Tones, Humor Mechanisms, Filters NSFW                    │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. CHAPTER 7 — FRONTEND ARCHITECTURE (MOBILE APP & WEB PLATFORM)
+
+### 8.1 Mobile App Codebase
+* **Framework:** React 19 running inside Capacitor 8 WebView.
+* **Component Architecture:**
+  * `App.tsx`: Central orchestrator containing state hooks (`meme`, `loading`, `vault`, `viewCount`), API callers, ad triggers, and view management.
+  * Native Bridge Contract:
+    ```javascript
+    window.MemeCapsuleAndroid = {
+      downloadImage: (url, title) => void,
+      shareImage: (url, title, shareText) => void
+    }
+    ```
+* **State Management:** Reactive local component state paired with resilient `localStorage` synchronization:
+  * `meme_favorites`: Array of favorited meme objects.
+  * `liked_memes`: Array of liked meme URLs.
+  * `total_memes_viewed`: Cumulative counter triggering interstitial ads every 4 cycles.
+
+### 8.2 Marketing & Web Platform Codebase
+* **Framework:** React 18, Vite 5, Tailwind CSS v3, React Router DOM v6.
+* **Component Directory (`src/components/`):**
+  * `Hero.tsx`: High-impact Anton display headline, official app emblem, Google Play badge with install click tracking.
+  * `MemePreview.tsx`: Live interactive capsule simulator with daily quota limiter (5 drops), failure recovery fallback pool (`FALLBACK_MEMES`), lockout bumper, and AdSense unit integration.
+  * `AdBanner.tsx`: Lazy-loaded Google AdSense banner component (`slot="6291908699"`).
+  * `Features.tsx`: 6-card feature grid (One Button, Pure Random, Share Instantly, Save to Gallery, Meme Vault, Zero Sign-Up).
+  * `Screenshots.tsx`: 3D interactive phone frame mockups with dynamic mouse-tilt math (`rotateX`, `rotateY`, `scale3d`), neo-brutalist harsh drop shadows (`25px 25px 0px -10px #f4c300`), camera punch-hole, and full-resolution lightbox zoom modal.
+  * `HowItWorks.tsx`: 3-step illustrated walkthrough of app mechanics.
+  * `HowItWorksDetail.tsx`: Section 04.5 "Under the Hood" explaining the 5,000+ meme library, Reddit feed filtering, and zero-tracking privacy architecture.
+  * `Changelog.tsx`: Production version history tracking v1.0.0.
+  * `FAQ.tsx`: 15-question expandable accordion with semantic markup.
+  * `ContactForm.tsx`: Direct support submission targeting Formspree (`xwlenwzr`) with required privacy consent checkbox.
+  * `Footer.tsx`: Semantic footer with brand links, navigation anchors, developer attribution, and Play Store install link.
+  * `Preloader.tsx`: Animated brand splash with progress bar (`.pre-bar`).
+  * `CustomCursor.tsx`: Magnetic circular cursor with hover scale (`.cur-dot.act`).
+  * `GrainOverlay.tsx`: GPU-accelerated film grain overlay with reduced-motion support.
+  * `Vignette.tsx`: Edge shadow vignette for depth.
+  * `ScrollRail.tsx`: Desktop fixed vertical indicator reflecting active page sections.
+* **Page Directory (`src/pages/`):**
+  * `Home.tsx`: Primary landing route (`/`).
+  * `About.tsx`: Dedicated About & Press route (`/about`) featuring Entity Definition, Quick Facts Grid, One-Liner Copy Kit with copy-to-clipboard buttons, and Downloadable Brand Assets (WebP/PNG logo, OG banner).
+  * `Privacy.tsx`: Dedicated store-compliant Privacy Policy route (`/privacy`).
+  * `NotFound.tsx`: 404 handler with return-home CTA.
+* **Navigation & Scroll Hooks:**
+  * `useNavbarScroll.ts`: Controls navbar visibility (`isHidden`, `isStuck`) and calculates current active section for the scroll rail.
+  * `useScrollReveal.ts`: IntersectionObserver binding animating elements with `[data-rv="up"]` and `[data-rv="fade"]`.
+
+---
+
+## 9. CHAPTER 8 — BACKEND ARCHITECTURE (CLOUDFLARE SERVERLESS EDGE)
+
+### 9.1 Edge Functions Route Map
+All routes run as Cloudflare Pages Functions in the `functions/api/` directory:
+
+| Path | HTTP Method | Auth Required | Description |
+|---|---|---|---|
+| `/api/random-meme` | `GET`, `OPTIONS` | Public | Selects and returns a single active meme record from D1 with CORS headers. |
+| `/api/daily-meme` | `GET`, `OPTIONS` | Public | Returns deterministic daily meme based on date seed. |
+| `/api/like` | `POST` | Public | Atomically increments `likes_count` for a specific meme ID in D1. |
+| `/api/report` | `POST` | Public | Submits a user report against an inappropriate meme. |
+| `/api/admin/memes` | `GET`, `POST`, `PATCH`, `DELETE` | Bearer Token | Administrative CRUD interface for meme catalog. |
+| `/api/admin/upload` | `POST` | Bearer Token | Multipart file stream directly into Cloudflare R2 bucket. |
+| `/api/admin/sync-r2` | `POST` | Bearer Token | Automated reconcile tool matching R2 files against D1 rows. |
+
+### 9.2 CORS Policy & Edge Headers
+All public API responses enforce standard Cross-Origin Resource Sharing headers:
+```typescript
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+```
+
+---
+
+## 10. CHAPTER 9 — DATABASE & DATA MODEL (D1 SQLITE & R2 STORAGE)
+
+### 10.1 Cloudflare D1 Production Schema (`memes` Table)
+```sql
+CREATE TABLE IF NOT EXISTS memes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    image_url TEXT,
+    storage_path TEXT NOT NULL UNIQUE,
+    source_link TEXT,
+    category TEXT DEFAULT 'General',
+    tags TEXT,                      -- JSON string array: '["gaming", "relatable"]'
+    rarity TEXT DEFAULT 'Common',    -- 'Common', 'Rare', 'Epic', 'Legendary'
+    status TEXT DEFAULT 'active',    -- 'draft', 'active', 'archived'
+    media_type TEXT DEFAULT 'image', -- 'image', 'video', 'gif'
+    input_method TEXT DEFAULT 'upload',
+    is_active INTEGER DEFAULT 1,     -- 1 = eligible for public drops, 0 = hidden
+    uploaded_at TEXT NOT NULL,       -- ISO timestamp
+    shown_count INTEGER DEFAULT 0,
+    share_count INTEGER DEFAULT 0,
+    likes_count INTEGER DEFAULT 0,
+    rights_note TEXT DEFAULT 'reviewed',
+    random_key REAL DEFAULT (abs(random()) / 9223372036854775807.0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memes_active_random ON memes (is_active, random_key);
+CREATE INDEX IF NOT EXISTS idx_memes_status ON memes (status);
+```
+
+### 10.2 Media Storage (Cloudflare R2)
+* **Bucket:** `memes`
+* **Access Mode:** Public read via custom CDN endpoint (`pub-3e7961a132964ff581b779a5dad40771.r2.dev`).
+* **Egress Cost:** **$0.00**.
+* **Formats Supported:** WebP (preferred), JPEG, PNG, GIF.
+
+---
+
+## 11. CHAPTER 10 — APIS, ADVERTISING & EXTERNAL INTEGRATIONS
+
+### 11.1 External Services Matrix
+| Service | Integration Point | Purpose | Config Key / ID |
+|---|---|---|---|
+| **Google Play Store** | App Listing & Conversion Links | App distribution & install tracking | `com.meme.capsule` |
+| **Google AdSense** | Website (`AdBanner.tsx`, `index.html`) | Web platform monetization | `ca-pub-2093403233028868` (Slot: `6291908699`) |
+| **Google AdMob** | Android App (`src/App.tsx`) | Mobile interstitial monetization | Interstitial triggered every 4th meme view |
+| **Google Analytics 4** | Website & App (`gtag`) | Anonymous conversion & engagement analytics | `G-8VMD4ZNQQK` |
+| **Formspree** | Website (`ContactForm.tsx`) | Serverless support and inquiry routing | `xwlenwzr` |
+| **Reddit Meme API** | Mobile App Alternating Feed | Auxiliary public meme stream | `meme-api.com/gimme` (SFW verified) |
+| **NVIDIA NIM** | AI Pre-Judge Pipeline | Multimodal visual classification | Llama 3.2 11B Vision Instruct |
+
+### 11.2 Conversion & Attribution Tracking
+Website conversion tracking is centralized in `src/constants/config.ts`:
+* **UTM Generation:**
+  ```typescript
+  getPlayStoreUrl: (medium = 'direct') =>
+    `https://play.google.com/store/apps/details?id=com.meme.capsule&referrer=utm_source%3Dwebsite%26utm_medium%3D${medium}`
+  ```
+* **Beacon Tracking:** `trackInstallClick(location)` sends GA4 `conversion_play_store_click` events across all interactive badges, headers, bumpers, and footers.
+
+---
+
+## 12. CHAPTER 11 — AI / ML SYSTEMS (PRE-JUDGE PIPELINE)
+
+### 12.1 Purpose & Execution Model
+To prevent human curation bottlenecks and prevent inappropriate content ingestion, Meme Capsule employs an automated Python runner (`ai-categoriser/categorise.py`) powered by **NVIDIA NIM Llama 3.2 11B Vision Instruct**.
+
+```
+[Raw Ingestion Queue] 
+        │
+        ▼
+[Python Runner: categorise.py]
+        │
+        ├─ Extracts Image Base64
+        ├─ Submits to NVIDIA NIM Vision Model
+        │
+        ▼
+[Structured Analysis]
+        ├─ OCR / Text Extraction
+        ├─ Humor Mechanism: (Irony, Absurdity, Relatability)
+        ├─ Topic Tagging: (Tech, Gaming, Everyday, Wholesome)
+        ├─ Rarity Rating: (Common, Rare, Epic)
+        └─ Safety Screen: (NSFW = 0, Toxic = 0)
+        │
+        ▼
+[D1 Staging Table] ──► Superadmin Human Review Queue
+```
+
+---
+
+## 13. CHAPTER 12 — AUTHENTICATION, SECURITY, PRIVACY & PERMISSIONS
+
+### 13.1 User Identity Model
+Meme Capsule adheres to a strict **Zero-Identity Architecture**:
+* **No Authentication:** No sign-up, login, social auth, or email capture.
+* **No Cookies:** No tracking or profiling cookies.
+* **No Permissions:** Android app requires **zero runtime permissions** (uses Android 10+ MediaStore API for storage).
+* **Local Data Ownership:** Meme Vault and history reside solely in device `localStorage`. Uninstalling the app purges all data.
+
+### 13.2 Privacy Policy & Store Compliance
+* **Dedicated Route:** `/privacy` (with standalone static fallback `public/privacy.html`).
+* **Contact Form Consent:** Mandatory checkbox on `ContactForm.tsx` ensuring user gives explicit consent to be contacted regarding their feedback.
+* **Ad Transparency:** Full disclosure regarding Google AdSense cookies and AdMob non-personalized advertising.
+
+---
+
+## 14. CHAPTER 13 — ADMIN, CURATION & MODERATION SYSTEMS
+
+* **Admin Portal (`/admin`):** Token-authenticated dashboard for manual meme inspection, rarity assignment, metadata edits, and R2 uploads.
+* **Reports Dashboard (`/reports`):** Interface for reviewing user-flagged content, verifying policy violations, soft-deleting items, and adding image hashes to the blacklist.
+
+---
+
+## 15. CHAPTER 14 — END-TO-END SYSTEM WORKFLOWS & DATA FLOWS
+
+### 15.1 Daily Drop Synchronization
+```text
+Client Device (Local Date: 2026-09-25)
+       │
+       ▼ Calls GET /api/daily-meme
+Cloudflare Edge Worker
+       │ Computes deterministic hash from UTC date string ("2026-09-25")
+       ▼ Queries D1:
+SELECT * FROM memes WHERE is_active = 1 AND status = 'active'
+ORDER BY ((id || '2026-09-25') * 16807 % 2147483647) LIMIT 1;
+       │
+       ▼ Returns identical meme to every global user on that date
+Client displays persistent "Daily Drop" badge with zero repeat variations.
+```
+
+---
+
+## 16. CHAPTER 15 — UI/UX & NEO-BRUTALIST DESIGN SYSTEM
+
+### 16.1 Design Tokens & Palettes
+The entire visual identity is built on a high-contrast cyber neo-brutalist foundation:
+
+| Token | Hex Value | Name | Usage |
+|---|---|---|---|
+| `bg` | `#131313` | Pitch Black | Root application and page canvas background |
+| `surface` | `#1c1b1b` | Charcoal Surface | Cards, modals, phone frames, feature tiles |
+| `surfaceHigh` | `#2a2a2a` | Slate Container | Input fields, active badges, philosophy block |
+| `purple` | `#9b30ff` | Cyber Purple | Primary borders, branding accents, hover glows |
+| `purpleLight` | `#dcb8ff` | Lavender Tint | Subtle highlights, text accents |
+| `gold` | `#f4c300` | Arcade Gold | CTAs, drop shadows, section subheadings, badges |
+| `goldLight` | `#ffe399` | Pale Gold | Secondary highlights |
+| `pink` | `#dd0061` | Hot Magenta Pink | Rarity stamps, warning badges, offset drop shadows |
+| `pinkLight` | `#ffb1c0` | Rose Tint | Delicate accents |
+| `text` | `#e5e2e1` | Off-White | Crisp, high-contrast readable body and headlines |
+| `muted` | `#988ca1` | Muted Lavender | Section markers, secondary descriptions, counters |
+
+### 16.2 Typography Tokens
+* **Headlines (`font-anton`):** Google Font `Anton` — ultra-bold, condensed uppercase display typeface used for all H1–H3 titles and primary brand statements.
+* **Body, Subtitles & Badges (`font-oswald`):** Google Font `Oswald` — clean, mechanical, high-density sans-serif used for body copy, buttons, section markers, and counters.
+
+### 16.3 Neo-Brutalist Micro-Interactions
+* **Harsh Drop Shadows:** No blurred drop shadows; hard geometric color blocks (`4px 4px 0px #f4c300`, `4px 4px 0px #dd0061`, `25px 25px 0px -10px #f4c300`).
+* **Tactile Button Clicks:** `.neo-button-primary` shifts `translate-x-1 translate-y-1` on hover with shadow collapse.
+* **Kinetic Word Reveals:** `.word-reveal` wraps words in overflow-hidden masks and translates them smoothly on scroll entry.
+* **CTA Fill-Reveal:** `.cta-fill` features an inset neon purple background that slides up from 101% on mouse hover.
+* **Glitch Mode:** `html.theme-glitch` applies CRT scanlines, 115° hue rotation, and randomized keyframe skews.
+
+---
+
+## 17. CHAPTER 16 — TECHNICAL INFRASTRUCTURE, SEO/GEO & DEPLOYMENT PIPELINES
+
+### 17.1 Web Deployment & Static Prerendering
+* **Hosting:** GitHub Pages with custom domain DNS routing (`memecapsule.wtf`).
+* **Build Pipeline:** GitHub Actions workflow executing Vite build.
+* **Static Prerendering:** Uses `vite-plugin-prerender` with deterministic `ReactSSRRenderer` to produce fully-baked HTML files for `/` and `/privacy`, guaranteeing complete indexability without client JS execution.
+
+### 17.2 Search Engine Optimization (SEO, GEO & AEO)
+1. **Schema.org Structured Data (JSON-LD):**
+   * `WebSite` (`@id: #website`): Canonical entity and search action.
+   * `Organization` (`@id: #organization`): Developer Pratham Pandey, verified links to GitHub and Google Play.
+   * `MobileApplication` (`@id: #app`): Directly links to Google Play package `com.meme.capsule`, rating, price ($0), operating system (Android).
+   * `FAQPage`: Formats all 15 FAQ questions into Google SERP rich snippet accordions.
+2. **Generative Engine Optimization (GEO):**
+   * `public/llms.txt`: Concise executive summary for LLMs.
+   * `public/llms-full.txt`: Deep architectural context for AI search engines (ChatGPT Search, Perplexity, Claude, Gemini).
+   * `public/robots.txt`: Explicitly whitelists frontier AI scrapers (`GPTBot`, `ClaudeBot`, `PerplexityBot`, `Google-Extended`).
+3. **XML Sitemap:** Structured `sitemap.xml` with priority and `lastmod` timestamps for all routes.
+
+---
+
+## 18. CHAPTER 17 — PERFORMANCE, CORE WEB VITALS & OFFLINE MECHANICS
+
+### 18.1 Core Web Vitals (CWV) Tuning
+* **Largest Contentful Paint (LCP):** Modern WebP logo (35.78 KB, ~97% reduction), resource hints (`preconnect` to fonts and CDNs, `dns-prefetch`, `preload`), critical font async loading.
+* **Cumulative Layout Shift (CLS):** Explicit `width` and `height` attributes on all images and containers (`aspect-[4/5]` for meme preview, `aspect-[9/19.5]` for 3D phone mockups). Zero layout shift on ad render.
+* **Interaction to Next Paint (INP):** Film grain overlay animated with GPU acceleration (`will-change: transform`), disabled for users requesting reduced motion.
+* **Production Bundle:** Lightweight footprint (~91.8 kB gzipped JS, ~6.9 kB gzipped CSS).
+
+---
+
+## 19. CHAPTER 18 — IMPLEMENTATION STATUS AUDIT
+
+| Feature / Subsystem | Status | Current Codebase Evidence |
+|---|---|---|
+| **Android Native App Shell** | `IMPLEMENTED` | Capacitor 8 wrapper, `MainActivity.java`, Google Play store production release. |
+| **MediaStore Native Save** | `IMPLEMENTED` | `window.MemeCapsuleAndroid.downloadImage` in `MainActivity.java`. |
+| **Native Intent Share** | `IMPLEMENTED` | `window.MemeCapsuleAndroid.shareImage` in `MainActivity.java`. |
+| **Hacker Loading Console** | `IMPLEMENTED` | CSS `@keyframes erratic` and dynamic log cycles in `App.tsx`. |
+| **Meme Vault (Favorites)** | `IMPLEMENTED` | LocalStorage persistence, search filter, and statistics dashboard in `App.tsx`. |
+| **Alternating Reddit Feed** | `IMPLEMENTED` | Modulo 3 traffic router calling `meme-api.com/gimme` with SFW filter. |
+| **Cloudflare D1 & R2 Backend**| `IMPLEMENTED` | `functions/api/random-meme.ts`, `d1/schema.sql`, and live edge deployment. |
+| **AI Pre-Judge Pipeline** | `IMPLEMENTED` | `ai-categoriser/categorise.py` executing NVIDIA NIM Llama 3.2 Vision. |
+| **Official Web Platform** | `IMPLEMENTED` | Multi-page Vite + React 18 site on `memecapsule.wtf`. |
+| **3D Mockups with Real WebP** | `IMPLEMENTED` | 5 authentic Android app screenshots in `Screenshots.tsx` with tilt & lightbox. |
+| **Live Meme Drop & Quota** | `IMPLEMENTED` | Interactive preview with 5-drop limit & download bumper in `MemePreview.tsx`. |
+| **Google AdSense (meme1)** | `IMPLEMENTED` | Ad unit `6291908699` with deferred script loading in `AdBanner.tsx`. |
+| **Section 04.5 Under the Hood**| `IMPLEMENTED` | Curation & data transparency breakdown in `HowItWorksDetail.tsx`. |
+| **Dedicated About & Press Kit**| `IMPLEMENTED` | Entity definition, copy kit, and brand asset downloads in `About.tsx`. |
+| **Expanded 15-Question FAQ** | `IMPLEMENTED` | 15 search-intent answers + Schema.org markup in `FAQ.tsx`. |
+| **Deterministic Prerender** | `IMPLEMENTED` | `vite-plugin-prerender` with `ReactSSRRenderer` for static HTML. |
+| **Giscus Community Board** | `SUPERSEDED / SCRAPPED`| Removed in commit `a027019` in favor of Formspree contact form. |
+| **Stacking Card Scroll** | `SUPERSEDED / REVERTED`| Removed in commit `bbcfba9` to restore authentic Kage scroll reveals. |
+
+---
+
+## 20. CHAPTER 19 — PRODUCT ROADMAP & FUTURE DIRECTION
+
+### 20.1 Committed Near-Term Roadmap (v1.1 - v1.2)
+* **Tactile Mechanical Sound FX:** Native audio synthesis playing crisp mechanical typewriter clicks on button press and heavy hydraulic thuds when a capsule unlocks.
+* **Home Screen Widget:** Android widget ("Capsule of the Hour") dropping a single fresh meme onto the user's home screen every 60 minutes.
+* **Encrypted Vault Backup/Restore:** Ability to export the offline Meme Vault as an encrypted JSON backup file and import it onto a new device.
+
+### 20.2 Exploratory / Long-Term Concepts (v2.0+)
+* **Community Drop Submissions:** Direct in-app user submission portal passing images through the automated NVIDIA NIM safety pre-judge into the admin review queue.
+* **Meme Streaks & Badges:** Unlocking rare retro-cyber cosmetic console frames after reaching viewing milestones (e.g., 500 drops opened).
+
+---
+
+## 21. CHAPTER 20 — PROJECT TERMINOLOGY & MASTER GLOSSARY
+
+* **Capsule:** The conceptual unit of content delivery in Meme Capsule. Unlike an item in a feed, a capsule is a sealed container that must be opened.
+* **Spawn / Drop:** The act of dispensing a single meme from the cloud library.
+* **Meme Vault:** The user's offline collection of favorited memes stored in local device storage.
+* **Hacker Loader:** The retro-cyber diagnostic terminal animation running during API queries.
+* **Under the Hood:** Section 04.5 on the website providing honest architectural transparency.
+* **Bumper:** The modal locking web preview after 5 drops to encourage Google Play app downloads.
+* **Acid / Glitch Theme:** The alternative CRT scanline and high-saturation website theme.
+
+---
+
+## 22. CHAPTER 21 — PRODUCT DIFFERENTIATION & KEY CHARACTERISTICS
+
+1. **Discrete Consumption vs. Infinite Loop:** Social media platforms use infinite scroll to keep users in a state of passive hypnotic consumption. Meme Capsule uses discrete single-unit interaction, giving users full agency over when they start and stop.
+2. **Zero Algorithmic Profiling:** Most content platforms serve memes calculated to provoke anger or compulsive interaction based on demographic tracking. Meme Capsule serves pure, unfiltered, human-curated chaos where every user has an equal probability of receiving any drop.
+3. **Frictionless Onboarding:** No onboarding slides, no permissions prompts on startup, no account registration, and no password management.
+4. **Radical Technical Transparency:** Explains exactly how memes are fetched, curated, and stored directly on the website with zero corporate obfuscation.
+
+---
+
+## 23. CHAPTER 22 — KNOWN LIMITATIONS, TECHNICAL DEBT & RESOLVED ISSUES
+
+### 22.1 Resolved Issues
+1. **Placeholder Screenshot Assets (RESOLVED):** Previously referenced external placeholder generators (`via.placeholder.com`). Fully replaced with 5 authentic Android app screenshots optimized into WebP + JPEG format with 3D tilt frames and lightbox zoom.
+2. **GitHub Pages SPA Subpage Routing (RESOLVED):** Subpages like `/privacy` and `/about` initially suffered from SPA 404 reload issues. Fully resolved via `vite-plugin-prerender` generating static HTML files and a dedicated fallback `privacy.html`.
+3. **CORS Headers on Cloudflare Pages (RESOLVED):** Missing CORS headers on `/api/random-meme` originally caused browser cross-origin blocks on `memecapsule.wtf`. Resolved via explicit `CORS_HEADERS` injection.
+4. **Giscus Comment Clutter (RESOLVED):** Scrapped GitHub Discussions commenting widget in favor of a clean, store-compliant contact form with privacy consent.
+
+### 22.2 Open Considerations
+1. **Google Play UGC Compliance:** Because the app queries Reddit as an auxiliary feed, it must strictly enforce client-side NSFW/spoiler filters and provide prominent in-app content reporting to comply with Google Play User Generated Content policies.
+2. **AdSense Auto-Ads vs. Custom Placement:** Manual placement of ad unit `meme1` below the preview ensures optimal CLS and user experience, but auto-ads must be monitored to prevent intrusive layout shifts.
+
+---
+
+## 24. CHAPTER 23 — DEVELOPMENT HISTORY & ARCHITECTURAL DECISIONS
+
+* **Decision 1: Migration from Supabase to Cloudflare R2 + D1**
+  * *Reasoning:* Supabase free tier imposes a strict 5GB monthly bandwidth cap. Media-heavy meme apps would exhaust this quota rapidly. Moving to Cloudflare R2 provided **zero-cost egress**, while D1 SQLite colocated metadata at the edge with native bindings.
+* **Decision 2: Elimination of Redundant "Again" Buttons**
+  * *Reasoning:* Early UI designs displayed two concurrent repeat buttons after a meme appeared. The UI was streamlined into a single primary action: `Spawn a Random Meme` $\rightarrow$ `Spawn Another`.
+* **Decision 3: Android MediaStore Adoption Over Capacitor Filesystem**
+  * *Reasoning:* Standard Capacitor filesystem plugins required requesting legacy storage permissions on Android. Writing a custom native Java bridge using Android 10+ MediaStore enabled seamless gallery saving with zero permission dialogs.
+* **Decision 4: Reverting Full-Page Stacking Cards Animation**
+  * *Reasoning:* A brief experiment with Lenis-based stacking cards scroll animation compromised the tactile, responsive feel of the site and introduced performance overhead. It was reverted to restore the authentic Kage scroll reveal and section navigation.
+* **Decision 5: Scrapping Giscus Comments for Direct Contact Form**
+  * *Reasoning:* GitHub-backed comments attracted spam and felt out of place for a consumer mobile app landing site. Replaced with a sleek Formspree contact form requiring explicit privacy consent.
+* **Decision 6: Deployment of Real Android App Screenshots**
+  * *Reasoning:* Converted authentic Android device captures to modern WebP format to showcase the real interface while keeping LCP lightning fast.
+* **Decision 7: Multi-Page Architecture with Static CI Prerendering**
+  * *Reasoning:* Added `/about` for entity clarity, press citations, and brand assets, alongside `/privacy`, backed by `vite-plugin-prerender` with deterministic `ReactSSRRenderer` for reliable search engine indexing.
+
+---
+
+## 25. CHAPTER 24 — CONTENT-READY DESCRIPTIONS & COPY KIT
+
+### 25.1 One-Liner Descriptions
+* **Short (Under 10 Words):** Random memes. One tap. No algorithm.
+* **Medium (Under 30 Words):** Meme Capsule is a free Android app that delivers hand-curated random memes with one tap. No feed, no algorithm, just pure meme chaos.
+* **Long (Under 80 Words):** Meme Capsule is a free entertainment app for Android that randomly delivers curated memes from a library of thousands of hand-picked images, supplemented by a live Reddit meme feed. Users tap one button to receive a meme — there is no algorithm, no personalisation, and no endless scrolling. Memes can be saved to a personal vault, shared to any messaging app, or downloaded directly to the phone gallery.
+
+### 25.2 Technical Pitch (For Developers / AI Agents)
+> *Meme Capsule is a cross-platform content delivery ecosystem combining a Capacitor 8 native Android application (featuring a zero-permission Java MediaStore bridge), a Cloudflare Pages serverless edge backend querying Cloudflare D1 SQLite and R2 object storage with zero egress fees, a Python-driven multimodal vision AI pre-judging pipeline (NVIDIA NIM Llama 3.2 11B Vision), and a multi-page neo-brutalist React web presence with deterministic static prerendering.*
+
+---
+
+## 26. CHAPTER 25 — AI-HANDOFF / PORTABLE PROJECT CONTEXT
+
+```markdown
+<!-- START MEME CAPSULE AI CONTEXT BLOCK -->
+Project: Meme Capsule
+Bundle ID: com.meme.capsule
+Developer: Pratham Pandey (memecapsule.app@gmail.com)
+Websites: https://memecapsule.wtf | https://meme-capsule-eww.pages.dev
+Architecture:
+  - Client: Capacitor 8 Android App (React 19 / TypeScript / Tailwind CSS v4) + Java MediaStore Bridge
+  - Edge Backend: Cloudflare Pages Functions (Serverless TypeScript / V8 runtime)
+  - Database: Cloudflare D1 (Edge SQLite: `memes`, `reports`, `content_blacklist`)
+  - Object Storage: Cloudflare R2 (Bucket: `memes`, zero-cost egress CDN)
+  - AI Pipeline: Python script running NVIDIA NIM Llama 3.2 11B Vision Instruct for multimodal meme classification
+  - Web Platform: Multi-page React 18 / Vite 5 / Tailwind CSS v3 with static prerendering on GitHub Pages (memecapsule.wtf)
+  - Monetization: Google AdMob (mobile interstitials) & Google AdSense (web banner slot 6291908699, ca-pub-2093403233028868)
+
+Core Logic:
+  - Single-button discrete content delivery (Anti-feed / Anti-doomscroll philosophy).
+  - Primary API: GET /api/random-meme (fetches active D1 meme record via O(1) indexed random_key).
+  - Secondary API: Reddit Relay (every 3rd meme from meme-api.com/gimme with client-side NSFW/spoiler abort).
+  - Web Simulator: 5-drop quota counter with depletion bumper linking to Google Play Store with UTM tracking.
+  - Storage Flow: Saves to Android gallery using MediaStore.Images.Media (no user permissions required on API 29+).
+  - Client State: No user accounts. Favorites, stats, and liked history live in localStorage under `meme_favorites`.
+  - Design Tokens: Pitch Black (#131313), Neon Purple (#9b30ff), Arcade Gold (#f4c300), Hot Pink (#dd0061), Off-White (#e5e2e1), Muted (#988ca1).
+  - Web Components: Hero, MemePreview, Features, Screenshots (3D tilt + WebP lightbox), HowItWorks, HowItWorksDetail (04.5 Under the Hood), Changelog, FAQ (15 items), ContactForm (privacy consent checkbox), Preloader, CustomCursor, GrainOverlay, Vignette, ScrollRail, AdBanner.
+  - Web Pages: Home (/), About & Press Kit (/about), Privacy Policy (/privacy).
+<!-- END MEME CAPSULE AI CONTEXT BLOCK -->
+```
+
+---
+
+## 27. CHAPTER 26 — FINAL MASTER SUMMARY
+
+Meme Capsule reimagines digital comedy delivery for the modern era. By rejecting the manipulative mechanics of algorithmic social feeds, it returns content consumption to a state of voluntary, playful agency. 
+
+Technically, it represents an optimal union of modern web standards, native mobile capabilities, and hyper-efficient edge infrastructure:
+* **Capacitor and native Java** provide zero-permission OS integration and lightning-fast sharing.
+* **Cloudflare D1 and R2** provide infinitely scalable, zero-egress serverless delivery.
+* **NVIDIA NIM Multimodal AI** automates editorial quality control and humor taxonomy at scale.
+* **Neo-brutalism and Kage atmospheric design** give it a defiant, unforgettable visual identity across mobile and web.
+* **Static Prerendering and SEO/GEO protocols** ensure full discoverability across both traditional search engines and frontier AI models.
+
+Whether viewed as a consumer mobile app, a web platform, or a modern serverless case study, **Meme Capsule proves that in a world drowned in endless algorithmic noise, one button and a single capsule of pure chaos is all you need.**

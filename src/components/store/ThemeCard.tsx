@@ -128,16 +128,16 @@ export default function ThemeCard({
         </h4>
 
         {/* Description */}
-        <p className="font-sans text-[12px] text-neutral-300 leading-snug mb-3">
+        <p className="font-body-md text-[13px] text-[#e5e2e1] leading-relaxed mb-3 normal-case font-normal">
           {item.shortDescription}
         </p>
 
         {/* Perk Note */}
-        <div className="p-2 bg-black/30 border border-outline/30">
-          <span className="font-label-md text-[10px] text-secondary-container uppercase tracking-wider block">
+        <div className="p-2.5 bg-black/40 border border-outline/40">
+          <span className="font-label-md text-[11px] text-secondary-container uppercase tracking-widest font-bold block mb-0.5">
             ACCENT THEME
           </span>
-          <span className="font-sans text-[11px] text-neutral-400">
+          <span className="font-body-md text-[12px] text-neutral-300 leading-normal normal-case block">
             Re-colors headers, buttons, cards & highlight borders permanently.
           </span>
         </div>

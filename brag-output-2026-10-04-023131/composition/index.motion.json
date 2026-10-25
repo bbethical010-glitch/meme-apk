@@ -1,0 +1,10 @@
+{
+  "duration": 30,
+  "assertions": [
+    { "kind": "appearsBy", "selector": "#hook h1", "bySec": 0.8 },
+    { "kind": "appearsBy", "selector": "#result-pane", "bySec": 7.0 },
+    { "kind": "appearsBy", "selector": "#close .tagline", "bySec": 25.1 },
+    { "kind": "staysInFrame", "selector": "#drop-proof" },
+    { "kind": "staysInFrame", "selector": "#close .url" }
+  ]
+}

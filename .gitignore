@@ -11,3 +11,8 @@ coverage/
 .knowledge/*.local
 test-results/
 playwright-report/
+*.local.properties
+analytics.properties
+secrets.properties
+.idea/
+*.iml

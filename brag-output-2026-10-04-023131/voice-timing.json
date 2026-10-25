@@ -1,0 +1,46 @@
+{
+  "provider": "Kokoro-82M",
+  "voice": "af_heart",
+  "lines": [
+    {
+      "id": "hook",
+      "start": 0.35,
+      "window": 3.65,
+      "text": "Your five-minute break shouldn't become an endless scroll.",
+      "path": "assets/voice/hook.wav",
+      "duration": 2.730667
+    },
+    {
+      "id": "drop",
+      "start": 4.35,
+      "window": 5.65,
+      "text": "Meet Meme Capsule. Tap Hit Me, and a random meme drops. That's it.",
+      "path": "assets/voice/drop.wav",
+      "duration": 4.245333
+    },
+    {
+      "id": "keep",
+      "start": 10.35,
+      "window": 6.65,
+      "text": "Found a keeper? Save it to your Vault. Build Mood Boards for every kind of chaos.",
+      "path": "assets/voice/keep.wav",
+      "duration": 4.736
+    },
+    {
+      "id": "share",
+      "start": 17.35,
+      "window": 6.65,
+      "text": "Then send the good stuff straight to the group chat. No hunting for that screenshot.",
+      "path": "assets/voice/share.wav",
+      "duration": 4.522667
+    },
+    {
+      "id": "close",
+      "start": 24.35,
+      "window": 5.65,
+      "text": "One tap. One meme. Zero algorithms. Meme Capsule.",
+      "path": "assets/voice/close.wav",
+      "duration": 3.733333
+    }
+  ]
+}

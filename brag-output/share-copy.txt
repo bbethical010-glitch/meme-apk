@@ -1,1 +1,0 @@
-We built Meme Capsule: tap HIT ME, receive a fresh meme payload, and hoard the good ones in your Vault. Pure memes. Zero algorithm.

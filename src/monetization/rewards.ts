@@ -1,6 +1,6 @@
 import { notifyMonetizationChanged } from './events';
 
-export const FREE_BOARD_LIMIT = 3;
+export const FREE_BOARD_LIMIT = 7;
 const BONUS_KEY = 'meme_capsule_bonus_boards';
 const AD_FREE_KEY = 'meme_capsule_adfree_until';
 let sessionStarted = false;

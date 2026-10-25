@@ -10,8 +10,16 @@ export async function areAutomaticAdsSuppressed(): Promise<boolean> {
   catch { return true; } // Ownership unavailable: defer automatic ads until reconciled.
 }
 
-export async function maybeShowInterstitial(nextViewed: number): Promise<void> {
-  if (nextViewed % 4 !== 0 || !acquireFullscreenAd()) return;
+let lastInterstitialTime = 0;
+export const INTERSTITIAL_COOLDOWN_MS = 30_000;
+
+export function resetInterstitialCooldownForTesting(): void {
+  lastInterstitialTime = 0;
+}
+
+export async function maybeShowInterstitial(triggerCount?: number): Promise<void> {
+  if (triggerCount !== undefined && triggerCount % 4 !== 0) return;
+  if (!acquireFullscreenAd()) return;
   const listeners: PluginListenerHandle[] = [];
   try {
     if (await areAutomaticAdsSuppressed()) return;
@@ -23,13 +31,21 @@ export async function maybeShowInterstitial(nextViewed: number): Promise<void> {
     listeners.push(await AdMob.addListener(InterstitialAdPluginEvents.Dismissed, finish));
     listeners.push(await AdMob.addListener(InterstitialAdPluginEvents.FailedToShow, finish));
     await AdMob.showInterstitial();
+    lastInterstitialTime = Date.now();
     await dismissed;
   } catch {
-    // No-fill/offline ads must never block a capsule drop.
+    // No-fill/offline ads must never block navigation or drops.
   } finally {
     await Promise.allSettled(listeners.map(listener => listener.remove()));
     releaseFullscreenAd();
   }
+}
+
+export async function maybeShowScreenTransitionInterstitial(fromScreen?: string, toScreen?: string): Promise<void> {
+  if (fromScreen && toScreen && fromScreen === toScreen) return;
+  const now = Date.now();
+  if (now - lastInterstitialTime < INTERSTITIAL_COOLDOWN_MS) return;
+  await maybeShowInterstitial();
 }
 
 let bannerQueue: Promise<void> = Promise.resolve();

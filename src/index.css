@@ -64,6 +64,7 @@
   --font-label-md: Oswald;
   --font-label-xl: Oswald;
   --font-body-md: Chivo;
+  --font-sans: Chivo, system-ui, -apple-system, sans-serif;
   --font-headline-lg-mobile: Anton;
   --font-headline-xl: Anton;
 
@@ -104,6 +105,7 @@
 }
 
 :root {
+  color-scheme: dark;
   background-color: #131313;
   --safe-top:    env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -113,6 +115,7 @@
 
 html {
   min-height: 100%;
+  color-scheme: dark;
   background-color: #131313;
   margin: 0;
   padding: 0;
@@ -125,6 +128,7 @@ html {
 
 body {
   min-height: 100%;
+  color-scheme: dark;
   background-color: #131313;
   margin: 0;
   padding: 0;

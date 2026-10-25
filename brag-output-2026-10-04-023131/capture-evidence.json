@@ -1,0 +1,45 @@
+{
+  "viewport": {
+    "width": 430,
+    "height": 900,
+    "deviceScaleFactor": 2
+  },
+  "hitButton": {
+    "x": 16,
+    "y": 328.25,
+    "width": 398,
+    "height": 156
+  },
+  "sources": [
+    {
+      "id": "3b7e730f-fc63-4396-8474-d03fbfb5d293",
+      "url": "https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C4E4ujMM4A0.jpg"
+    },
+    {
+      "id": "b88dfa5d-2103-44d3-b05d-6f81dee6ac91",
+      "url": "https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C3qBWhbrJGu.jpg"
+    }
+  ],
+  "method": "Actual React UI in an isolated Playwright context; frozen API responses from public backend; external writes intercepted. Board created and current meme saved/pinned through UI.",
+  "buttons": [
+    "",
+    "✕",
+    "WhatsApp",
+    "Instagram",
+    "Facebook",
+    "X",
+    "Telegram",
+    "Discord",
+    "📡 QUICKSHARE",
+    "MORE OPTIONS",
+    "📋COPY TO CLIPBOARD",
+    "",
+    "LIKE",
+    "SAVED",
+    "PINNED",
+    "MORE",
+    "",
+    "",
+    ""
+  ]
+}

@@ -54,7 +54,7 @@ export function queryOwnedPurchases(): Promise<Transaction[]> {
   });
 }
 
-import { CATALOG } from './catalog';
+import { CATALOG, CATALOG_BY_ID } from './catalog';
 
 export const FALLBACK_PRODUCTS: Product[] = CATALOG.map((item) => ({
   identifier: item.id,
@@ -81,7 +81,19 @@ export async function queryProducts(): Promise<Product[]> {
       return products;
     });
     if (live && live.length > 0) {
-      return live;
+      return FALLBACK_PRODUCTS.map((fallback) => {
+        const liveMatch = live.find((p) => p.identifier === fallback.identifier);
+        const catalogItem = CATALOG_BY_ID[fallback.identifier as ProductId];
+        const authoritativePrice = catalogItem?.basePriceINR ?? fallback.price;
+        if (!liveMatch) {
+          return fallback;
+        }
+        return {
+          ...liveMatch,
+          price: authoritativePrice,
+          priceString: `₹${authoritativePrice}`,
+        };
+      });
     }
   } catch (err) {
     console.warn('[Billing] Query live products failed, using reference catalog prices:', err);

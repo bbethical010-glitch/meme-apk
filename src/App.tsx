@@ -35,18 +35,18 @@ import {
   MoreVertical,
   Star,
   Calendar,
+  BarChart3,
+  RefreshCw,
+  Sliders,
 } from 'lucide-react';
 import { Share } from '@capacitor/share';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { maybeShowInterstitial as showInterstitial, setBannerVisible } from './monetization/ads';
+import { maybeShowScreenTransitionInterstitial, setBannerVisible } from './monetization/ads';
 import { AD_UNITS } from './monetization/adsConfig';
 import { showRewardedAd } from './monetization/rewardedAds';
-import { canCreateBoard, getAdFreeExpiry, grantAdFreeWindow, grantBonusBoard, grantThemedPack, isInAdFreeWindow, resetBonusBoards, startRewardSession } from './monetization/rewards';
+import { canCreateBoard, FREE_BOARD_LIMIT, getAdFreeExpiry, grantBonusBoard, isInAdFreeWindow, resetBonusBoards, startRewardSession } from './monetization/rewards';
 import { MONETIZATION_CHANGED, MONETIZATION_TOAST } from './monetization/events';
-import type { PackId } from './monetization/packs';
-import RewardPacks from './components/RewardPacks';
 import StoreScreen from './components/store/StoreScreen';
-import DropModeSelector from './components/DropModeSelector';
 import { ARCADE_FX_STYLES, getActiveFx, setActiveFx, FX_CHANGED, type ArcadeFxStyle } from './monetization/arcadeFx';
 import ProductPurchase from './components/ProductPurchase';
 import ThemePicker, { THEME_CHANGED, THEME_KEY } from './components/ThemePicker';
@@ -85,7 +85,7 @@ declare global {
 
 const RANDOM_MEME_ENDPOINT = 'https://meme-capsule-eww.pages.dev/api/random-meme';
 const REDDIT_MEME_ENDPOINT = 'https://meme-api.com/gimme';
-const FREE_VAULT_LIMIT = 20;
+const FREE_VAULT_LIMIT = 100;
 
 const getBoardHex = (color?: string): string => {
   if (!color) return '#f4c300';
@@ -191,8 +191,8 @@ const fetchJson = async (url: string) => {
 const fetchBackendMemePayload = () => fetchJson(RANDOM_MEME_ENDPOINT);
 const fetchRedditMemePayload = () => fetchJson(REDDIT_MEME_ENDPOINT);
 
-const safeFileName = (title: string) =>
-  `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'meme-capsule'}.jpg`;
+const safeFileName = (title?: string) =>
+  `${(title || 'meme-capsule').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'meme-capsule'}.jpg`;
 
 type TabType = 'home' | 'favorites' | 'boards' | 'settings';
 type ScreenState = 'waiting' | 'loading' | 'viewing' | 'error';
@@ -316,7 +316,30 @@ function loadPersistedSession(): ActiveSessionSnapshot | null {
 }
 
 export default function App() {
-  const { trackEvent } = useAnalytics();
+  const {
+    consent,
+    updateConsent,
+    diagnostics,
+    refreshDiagnostics,
+    flushQueue,
+    trackEvent,
+    trackScreenView,
+    trackMemeView,
+    trackMemeLike,
+    trackMemeShare,
+    trackMemeSave,
+    trackMemeScroll,
+    trackCategoryClick,
+    trackOnboardingComplete,
+    trackProfileOpen,
+    trackSubscriptionClick,
+    trackFeedRefresh,
+    trackMemeReported,
+    trackAdImpression,
+    trackAdRewardViewed,
+    trackRetentionCheckin,
+  } = useAnalytics();
+  const [isDebugInspectorOpen, setIsDebugInspectorOpen] = useState(false);
   const initialSessionRef = useRef<ActiveSessionSnapshot | null | undefined>(undefined);
   if (initialSessionRef.current === undefined) {
     initialSessionRef.current = loadPersistedSession();
@@ -358,9 +381,11 @@ export default function App() {
   const [storeFocus, setStoreFocus] = useState<ProductId | null>(null);
   const [isStoreOpen, setIsStoreOpen] = useState(false);
   const openStore = useCallback((opts?: { focus?: ProductId }) => {
+    trackSubscriptionClick(opts?.focus ?? undefined);
+    trackScreenView('store');
     setStoreFocus(opts?.focus ?? null);
     setIsStoreOpen(true);
-  }, []);
+  }, [trackSubscriptionClick, trackScreenView]);
   const closeStore = useCallback(() => {
     if (window.history.state?.memeCapsuleStore) window.history.back();
     else {
@@ -368,7 +393,6 @@ export default function App() {
       setStoreFocus(null);
     }
   }, []);
-  const [dropMode, setDropMode] = useState<string>('all');
   const [activeFx, setActiveFxState] = useState<ArcadeFxStyle>(() => getActiveFx(entitlements.ownedFx));
   useEffect(() => {
     const update = () => setActiveFxState(getActiveFx(entitlements.ownedFx));
@@ -406,8 +430,8 @@ export default function App() {
     }
   });
   const [confirmWipeMode, setConfirmWipeMode] = useState<'none' | 'history' | 'vault' | 'all'>('none');
+  const [settingsTab, setSettingsTab] = useState<'experience' | 'membership' | 'privacy'>('experience');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const prevTabRef = useRef<'home' | 'favorites' | 'boards'>('home');
   const [ctaEffects, setCtaEffects] = useState<{
     key: 'like' | 'vault' | 'pin' | 'more' | null;
     tick: number;
@@ -428,40 +452,6 @@ export default function App() {
     const y = (e.clientY || rect.top + rect.height / 2) - rect.top - size / 2;
     setCtaEffects({ key, tick: Date.now(), x, y, size, color });
   }, []);
-
-  const closeSettings = useCallback(() => {
-    setConfirmWipeMode('none');
-    setActiveTab(prevTabRef.current || 'home');
-  }, []);
-
-  const toggleSettings = useCallback(() => {
-    setShowMoreMenu(false);
-    if (activeTab === 'settings') {
-      closeSettings();
-    } else {
-      prevTabRef.current = activeTab;
-      setActiveTab('settings');
-    }
-  }, [activeTab, closeSettings]);
-
-  useEffect(() => {
-    if (activeTab !== 'settings' || isStoreOpen) return;
-    if (!window.history.state?.memeCapsuleSettings) window.history.pushState({ memeCapsuleSettings: true }, '');
-    const handlePopState = () => {
-      closeSettings();
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeSettings();
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [activeTab, closeSettings, isStoreOpen]);
 
   const handleDimensionsLoaded = useCallback((dims: { width: number; height: number }) => {
     if (meme?.url) {
@@ -612,7 +602,7 @@ export default function App() {
         memeQueue: current.memeQueue.slice(0, PIPELINE_TARGET_SIZE),
         memeHistory: current.memeHistory.slice(-15),
         historyIndex: current.historyIndex,
-        activeTab: current.activeTab === 'settings' ? 'home' : current.activeTab,
+        activeTab: current.activeTab,
         multiDropMemes: current.multiDropMemes,
         multiDropIndex: current.multiDropIndex,
         isMultiDropView: current.isMultiDropView,
@@ -825,7 +815,8 @@ export default function App() {
     showToast('AGE VERIFIED (18+) ✓ WELCOME!', 'success');
   }, []);
 
-  const handleAgreePolicy = useCallback(() => {
+  const handleAgreePolicy = useCallback((analyticsGranted: boolean = true, advertisingGranted: boolean = true) => {
+    updateConsent(analyticsGranted, advertisingGranted, 1);
     localStorage.setItem('privacy_policy_agreed_version', '1.1');
     localStorage.setItem('privacy_policy_agreed_at', new Date().toISOString());
     setIsConsentModalOpen(false);
@@ -838,7 +829,7 @@ export default function App() {
         setIsDobModalOpen(true);
       }
     }
-  }, []);
+  }, [updateConsent]);
 
   // --- Google Play Rating Feature ---
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
@@ -949,6 +940,7 @@ export default function App() {
 
     if (lastDate === today) {
       setStreak(savedStreak || 1);
+      trackRetentionCheckin(savedStreak || 1);
     } else if (lastDate) {
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       if (lastDate === yesterday) {
@@ -956,15 +948,18 @@ export default function App() {
         setStreak(newStreak);
         localStorage.setItem('streak_count', newStreak.toString());
         localStorage.setItem('streak_last_date', today);
+        trackRetentionCheckin(newStreak);
       } else {
         setStreak(1);
         localStorage.setItem('streak_count', '1');
         localStorage.setItem('streak_last_date', today);
+        trackRetentionCheckin(1);
       }
     } else {
       setStreak(1);
       localStorage.setItem('streak_count', '1');
       localStorage.setItem('streak_last_date', today);
+      trackRetentionCheckin(1);
     }
 
     let loadedFavs: Meme[] = [];
@@ -1093,9 +1088,15 @@ export default function App() {
     }
   }, [activeTab]);
 
-  const maybeShowInterstitial = async (nextViewed: number) => {
-    await showInterstitial(nextViewed);
-  };
+  const screenTransitionTabRef = useRef<TabType>(activeTab);
+  useEffect(() => {
+    trackScreenView(activeTab);
+    if (screenTransitionTabRef.current !== activeTab) {
+      const fromTab = screenTransitionTabRef.current;
+      screenTransitionTabRef.current = activeTab;
+      void maybeShowScreenTransitionInterstitial(fromTab, activeTab);
+    }
+  }, [activeTab, trackScreenView]);
 
   const watchForReward = async (grant: () => void, message: string) => {
     if (rewardBusyRef.current) return;
@@ -1109,12 +1110,15 @@ export default function App() {
         showToast(message, 'success');
         return;
       }
+      trackAdImpression('rewarded');
       const result = await showRewardedAd();
       if (result.rewarded === true) {
+        trackAdRewardViewed('bonus_drop');
         grant();
         showToast(message, 'success');
       } else {
         // In sideloaded APK / development without live AdMob fill, grant test reward so testing free features is never blocked
+        trackAdRewardViewed('bonus_drop_test');
         grant();
         showToast('TEST REWARD GRANTED (+1 SLOT) ✓', 'success');
       }
@@ -1127,8 +1131,6 @@ export default function App() {
     }
   };
 
-  const watchForAdFree = () => watchForReward(grantAdFreeWindow, 'AD-FREE FOR 30 MIN ✓');
-  const watchForPack = (id: PackId) => watchForReward(() => grantThemedPack(id), 'PACK UNLOCKED FOR 24H ✓');
   const watchForBoard = () => watchForReward(() => {
     grantBonusBoard();
     setBoardLimitReached(false);
@@ -1523,7 +1525,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       setMemeHistory((prev) => [...prev.slice(-14), nextMeme]);
       setHistoryIndex(-1);
       if (nextMeme.id) trackEvent(nextMeme.id, 'view');
-      void maybeShowInterstitial(nextViewed);
     } catch (err) {
       console.warn('Inline meme advance fallback error:', err);
     }
@@ -1561,7 +1562,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         setHistoryIndex(-1);
 
         if (nextMeme.id) trackEvent(nextMeme.id, 'view');
-        void maybeShowInterstitial(nextViewed);
 
         // Phase 2: Enter animation done (400ms)
         setTimeout(() => {
@@ -1684,6 +1684,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       }
 
       showToast('REPORT FILED. CONTENT BLOCKED.', 'tertiary');
+      trackMemeReported(meme.id || meme.url, reason);
       setIsReportModalOpen(false);
 
       if (isMultiDropView && multiDropMemes.length > 1) {
@@ -1730,6 +1731,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     setShowReactionPicker(false);
     setShowBoardPicker(false);
     setErrorMsg('');
+    trackFeedRefresh();
 
     // If we already have pre-fetched memes in the FIFO buffer queue, pop immediately without reloading
     const currentQueue = memeQueueRef.current.length > 0 ? memeQueueRef.current : memeQueue;
@@ -1753,7 +1755,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       if (nextMeme.id) {
         trackEvent(nextMeme.id, 'view');
       }
-      void maybeShowInterstitial(nextViewed);
 
       recordStackConsumptionAndMaybeRefill(remainingQueue.length, nextViewed + queueFetchCounter);
       return;
@@ -1807,8 +1808,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         if (finalMeme.id) {
           trackEvent(finalMeme.id, 'view');
         }
-
-        void maybeShowInterstitial(nextViewed);
 
         // In background, stream the initial 4-card stack and fill the full 12-meme rolling FIFO buffer
         (async () => {
@@ -2011,7 +2010,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       setHistoryIndex(-1);
 
       if (nextMeme.id) trackEvent(nextMeme.id, 'view');
-      void maybeShowInterstitial(nextViewed);
 
       // Trigger fetching the next stack as soon as 60%-70% of the loaded memes have been viewed
       recordStackConsumptionAndMaybeRefill(remainingQueue.length, nextViewed + queueFetchCounter);
@@ -2030,7 +2028,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     advanceInlineWithoutLoadingScreen,
     trackEvent,
     toggleFavorite,
-    maybeShowInterstitial,
   ]);
 
   const requestBoardCreation = () => {
@@ -2230,13 +2227,23 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
   }, [pinnedMemes, favorites, deckMemes, memeQueue]);
 
   const downloadMeme = async (item: Meme) => {
+    if (!item || !item.url) {
+      showToast('NO MEME TO DOWNLOAD', 'tertiary');
+      return;
+    }
+
     const fileName = safeFileName(item.title);
 
     if (window.MemeCapsuleAndroid) {
       showToast('DOWNLOADING TO GALLERY...', 'secondary');
-      window.MemeCapsuleAndroid.downloadImage(item.url, fileName);
-      if (item.id) {
-        trackEvent(item.id, 'download');
+      try {
+        window.MemeCapsuleAndroid.downloadImage(item.url, fileName);
+        if (item.id) {
+          trackEvent(item.id, 'download');
+        }
+      } catch (err) {
+        console.error('Native download error:', err);
+        showToast('DOWNLOAD FAILED', 'tertiary');
       }
       return;
     }
@@ -2353,6 +2360,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         onClose={() => {
           setIsOnboardingOpen(false);
           localStorage.setItem('has_seen_onboarding', 'true');
+          trackOnboardingComplete();
           const savedDob = localStorage.getItem('meme_capsule_user_dob');
           if (!savedDob) {
             setIsDobModalOpen(true);
@@ -2431,75 +2439,66 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         }}
       />
 
-      <header className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)]">
-        <div className="flex items-center justify-between w-full max-w-[1200px] mx-auto">
-          {/* Left Slot: Redesigned Neo-Brutalist Settings Button (Leaf Icon Completely Removed, Re-Tap Toggles Settings) */}
-          <div className="w-[84px] flex items-center justify-start shrink-0">
-            <button
-              type="button"
-              onClick={toggleSettings}
-              className="w-[38px] h-[38px] flex items-center justify-center cursor-pointer select-none transition-all duration-100 active:translate-x-[1px] active:translate-y-[1px] active:!shadow-none"
-              style={{
-                backgroundColor: activeTab === 'settings' ? '#A855F7' : '#1c1c1e',
-                border: '2px solid #000000',
-                boxShadow: '2.5px 2.5px 0px #000000',
-                touchAction: 'manipulation',
-              }}
-              title={activeTab === 'settings' ? 'Close App Settings' : 'Open App Settings'}
-              aria-label={activeTab === 'settings' ? 'Close App Settings' : 'Open App Settings'}
-              aria-expanded={activeTab === 'settings'}
+      {/* Top Header — Visible on Landing Page, disappears as soon as HIT ME is pressed */}
+      {activeTab === 'home' && screen === 'waiting' && (
+        <header className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)] animate-in fade-in duration-200">
+          <div className="flex items-center justify-between w-full max-w-[1200px] mx-auto">
+            {/* Left Slot: Neo-Brutalist Settings Button */}
+            <div className="w-[84px] flex items-center justify-start shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className="w-[38px] h-[38px] flex items-center justify-center cursor-pointer select-none transition-all duration-100 active:translate-x-[1px] active:translate-y-[1px] active:!shadow-none"
+                style={{
+                  backgroundColor: '#1c1c1e',
+                  border: '2px solid #000000',
+                  boxShadow: '2.5px 2.5px 0px #000000',
+                  touchAction: 'manipulation',
+                }}
+                title="Open App Settings"
+                aria-label="Open App Settings"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#C084FC"
+                  strokeWidth="2.4"
+                  strokeLinecap="square"
+                  strokeLinejoin="miter"
+                >
+                  <circle cx="12" cy="12" r="3.2" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Center Slot: Simple, Clean Title */}
+            <h1
+              onClick={() => { setActiveTab('home'); setScreen('waiting'); setMeme(null); }}
+              className="font-headline-lg-mobile text-[22px] sm:text-[26px] md:text-[30px] font-bold text-white tracking-wider leading-none uppercase text-center cursor-pointer flex-1 mx-2 truncate hover:text-primary transition-colors"
+              style={{ textShadow: 'none', WebkitTextStroke: '0px' }}
             >
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={activeTab === 'settings' ? '#000000' : '#C084FC'}
-                strokeWidth="2.4"
-                strokeLinecap="square"
-                strokeLinejoin="miter"
-              >
-                <circle cx="12" cy="12" r="3.2" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </button>
-          </div>
+              MEME CAPSULE
+            </h1>
 
-          {/* Center Slot: Simple, Clean Title (Strictly Centered, No Shadow) */}
-          <h1
-            onClick={() => { setActiveTab('home'); setScreen('waiting'); setMeme(null); }}
-            className="font-headline-lg-mobile text-[22px] sm:text-[26px] md:text-[30px] font-bold text-white tracking-wider leading-none uppercase text-center cursor-pointer flex-1 mx-2 truncate hover:text-primary transition-colors"
-            style={{ textShadow: 'none', WebkitTextStroke: '0px' }}
-          >
-            MEME CAPSULE
-          </h1>
-
-            {/* Fixed-width ownership badge balances the header. Store entry lives in Settings. */}
-          <div className="w-[84px] flex items-center justify-end shrink-0">
-            {isPro ? (
+            {/* Right Slot: Store Button */}
+            <div className="w-[84px] flex items-center justify-end shrink-0">
               <button
                 type="button"
-                onClick={() => openStore({ focus: PRODUCTS.BUNDLE_ULTIMATE })}
+                onClick={() => openStore()}
+                className="px-2.5 py-1.5 bg-[#f4c300] hover:bg-[#ffe399] text-black border-[2px] border-black font-label-xl text-[11px] uppercase font-bold shadow-[2px_2px_0_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-1 cursor-pointer"
                 title="Open Capsule Store"
-                className="bg-secondary-container text-on-secondary-container border-[2px] border-background px-2.5 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 flex items-center gap-1 cursor-pointer font-bold"
               >
-                <Crown size={14} /> PRO
+                <span>STORE</span>
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => openStore({ focus: PRODUCTS.PRO_BUNDLE })}
-                title="Open Capsule Store"
-                className="bg-[#dd0061] text-white border-[2px] border-black px-2.5 py-1 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none flex items-center gap-1 cursor-pointer font-bold hover:brightness-110"
-              >
-                <Crown size={13} /> GO PRO
-              </button>
-            )}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
-      <main className="flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm py-2 gap-2 pb-[calc(88px+max(env(safe-area-inset-bottom,0px),16px))]">
+      <main className="flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm pt-[max(env(safe-area-inset-top),16px)] py-2 gap-2 pb-[calc(88px+max(env(safe-area-inset-bottom,0px),16px))]">
         {activeTab === 'home' && (
           <div className="w-full flex flex-col items-center justify-center flex-grow">
             {screen === 'waiting' && (
@@ -2516,41 +2515,18 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                     <p className="font-label-xl text-[14px] text-outline uppercase tracking-wider mt-1">ONE TAP. ONE CAPSULE DROP.</p>
                   </div>
 
-                  {/* Drop Mode Selector */}
-                  <DropModeSelector
-                    activeMode={dropMode}
-                    onSelectMode={setDropMode}
-                    onOpenStore={(focus) => openStore({ focus })}
-                    ownedPacks={entitlements.ownedPacks}
-                  />
-
-                  {/* HIT ME — the hero button */}
+                  {/* HIT ME — the sole hero button */}
                   <div className="relative w-full flex items-center justify-center mb-6">
                     {/* Pulsing glow ring behind the button */}
                     <div className="absolute inset-0 max-w-[500px] mx-auto bg-primary-container/20 border-[3px] border-primary-container/30 animate-pulse" style={{ animationDuration: '2s' }} />
                     <button
                       onClick={fetchMeme}
-                      className="relative w-full bg-primary-container text-on-primary-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-secondary-container)] py-8 px-md flex items-center justify-center active:translate-x-[4px] active:translate-y-[4px] active:shadow-none transition-all duration-150 group hover:bg-primary z-10"
+                      className="relative w-full bg-primary-container text-on-primary-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-secondary-container)] py-8 px-md flex items-center justify-center active:translate-x-[4px] active:translate-y-[4px] active:shadow-none transition-all duration-150 group hover:bg-primary z-10 cursor-pointer"
                     >
                       <div className="absolute left-0 top-0 bottom-0 w-2 bg-tertiary border-r-[3px] border-secondary-container" />
                       <span className="font-headline-xl text-[56px] sm:text-[64px] uppercase tracking-tighter group-active:scale-[0.96] transition-transform drop-shadow-[3px_3px_0px_var(--color-tertiary)]">HIT ME</span>
                     </button>
                   </div>
-
-                  {/* Secondary actions — compact row */}
-                  <div className="w-full flex gap-2">
-                    <button onClick={showRewardedAdAndGetBonus} className="flex-1 bg-tertiary text-on-tertiary border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-primary-container)] py-2.5 px-3 flex items-center justify-center gap-1.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all hover:brightness-110">
-                      <Sparkles size={16} className="animate-spin shrink-0" style={{ animationDuration: '3s' }} />
-                      <span className="font-label-xl text-[13px] uppercase tracking-tight">{isPro ? '💎 INSTANT' : 'BONUS DROP'}</span>
-                    </button>
-                    {isPro && <button onClick={fetchTripleDrop} className={`flex-1 border-[3px] border-secondary-container shadow-[3px_3px_0px_0px_var(--color-tertiary)] py-2.5 px-3 flex items-center justify-center gap-1.5 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all ${isPro ? 'bg-secondary-container text-on-secondary-container hover:brightness-110' : 'bg-surface-container-low text-outline'}`}>
-                      <Layers size={16} className="shrink-0" />
-                      <span className="font-label-xl text-[13px] uppercase tracking-tight">{isPro ? 'TRIPLE 🎰' : '🔒 TRIPLE'}</span>
-                    </button>}
-                  </div>
-
-                  <RewardPacks onUnlock={watchForPack} busy={rewardBusy} adFree={entitlements.adsRemoved} />
-                  {showHomeBanner && <div className="h-[60px]" aria-hidden="true" />}
                 </div>
               </section>
             )}
@@ -2983,12 +2959,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                             onClick={(e) => e.stopPropagation()}
                             className="absolute right-0 bottom-full mb-3 w-48 bg-white border-4 border-black shadow-[4px_4px_0px_#000000] z-50 flex flex-col divide-y-4 divide-black"
                           >
-                            <button type="button" disabled={rewardBusy || isInAdFreeWindow() || isPro}
-                              onClick={() => { setShowMoreMenu(false); void watchForAdFree(); }}
-                              className="w-full px-3.5 py-3 bg-[#131313] text-[#f4c300] text-left font-label-xl disabled:opacity-60">
-                              <span className="block">⚡ WATCH AD</span>
-                              <span className="text-[11px]">{isInAdFreeWindow() || isPro ? 'AD-FREE ACTIVE ✓' : '30 MIN AD-FREE'}</span>
-                            </button>
                             {/* 1. SHARE (#A855F7) */}
                             <button
                               type="button"
@@ -3237,7 +3207,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
             {!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards) && <div className="p-3 bg-surface-container border-2 border-secondary-container shadow-[4px_4px_0_#000] font-label-md">
               {boardLimitReached && <div className="mb-3">
                 <p className="font-headline-lg text-[16px] text-[#f4c300] uppercase mb-1.5">
-                  BOARD LIMIT REACHED (3/3) - GET BOARD BOSS FOR UNLIMITED BOARDS
+                  BOARD LIMIT REACHED ({FREE_BOARD_LIMIT}/{FREE_BOARD_LIMIT}) - GET BOARD BOSS FOR UNLIMITED BOARDS
                 </p>
                 <button
                   type="button"
@@ -3419,22 +3389,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         )}
 
         {activeTab === 'settings' && (
-          <section className="w-full max-w-[600px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200 pb-6 relative z-30">
-            {/* Backdrop Tap-to-Dismiss Outside Settings Panel */}
-            <div
-              className="fixed inset-0 bg-black/55 z-20"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeSettings();
-              }}
-              aria-hidden="true"
-            />
-
-            {/* Settings Header Banner */}
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="relative z-30 bg-surface-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-md flex flex-col gap-md"
-            >
+          <section className="w-full max-w-[700px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">
+            {/* Settings Tab Card */}
+            <div className="bg-surface-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-md flex flex-col gap-md">
               <div className="border-b-[3px] border-outline pb-sm flex items-center justify-between gap-sm">
                 <div>
                   <span className="font-label-md text-[12px] text-secondary-container uppercase tracking-widest block">
@@ -3444,431 +3401,644 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                     APP SETTINGS
                   </h2>
                 </div>
+                <div className="flex items-center gap-2 bg-surface-container-low border-[2px] border-outline px-3 py-1.5 shadow-[2px_2px_0px_0px_#000]">
+                  <Settings size={17} className="text-secondary-container animate-spin" style={{ animationDuration: '10s' }} />
+                  <span className="font-label-md text-[11px] text-white uppercase font-bold tracking-wider">
+                    CONFIG
+                  </span>
+                </div>
+              </div>
+
+              {/* Category Segmented Control */}
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#161616] border-[2px] border-outline/50 shadow-[2px_2px_0px_0px_#000]">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeSettings();
-                  }}
-                  className="w-[42px] h-[42px] bg-[#A855F7] hover:bg-[#FF2A85] active:bg-[#FF2A85] border-[2px] border-black shadow-[2px_2px_0px_0px_#000000] active:translate-x-[1px] active:translate-y-[1px] active:!shadow-none flex items-center justify-center shrink-0 cursor-pointer transition-all select-none"
-                  style={{ touchAction: 'manipulation' }}
-                  title="Close App Settings"
-                  aria-label="Close App Settings"
+                  onClick={() => setSettingsTab('experience')}
+                  className={`py-2 px-1 text-center font-label-xl text-[11px] sm:text-[12px] uppercase transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    settingsTab === 'experience'
+                      ? 'bg-[#f4c300] text-black font-extrabold border-[2px] border-black shadow-[2px_2px_0_#000]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                  }`}
                 >
-                  <svg
-                    width="22"
-                    height="22"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#000000"
-                    strokeWidth="3"
-                    strokeLinecap="square"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
+                  <Zap size={13} className={settingsTab === 'experience' ? 'text-black' : 'text-[#f4c300]'} />
+                  <span>EXPERIENCE</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsTab('membership')}
+                  className={`py-2 px-1 text-center font-label-xl text-[11px] sm:text-[12px] uppercase transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    settingsTab === 'membership'
+                      ? 'bg-[#f4c300] text-black font-extrabold border-[2px] border-black shadow-[2px_2px_0_#000]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                  }`}
+                >
+                  <Crown size={13} className={settingsTab === 'membership' ? 'text-black' : 'text-primary'} />
+                  <span>MEMBERSHIP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsTab('privacy')}
+                  className={`py-2 px-1 text-center font-label-xl text-[11px] sm:text-[12px] uppercase transition-all cursor-pointer flex items-center justify-center gap-1 ${
+                    settingsTab === 'privacy'
+                      ? 'bg-[#f4c300] text-black font-extrabold border-[2px] border-black shadow-[2px_2px_0_#000]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                  }`}
+                >
+                  <Shield size={13} className={settingsTab === 'privacy' ? 'text-black' : 'text-tertiary'} />
+                  <span>PRIVACY</span>
                 </button>
               </div>
 
-              {/* 1. Local Footprint & Telemetry Summary */}
-              <div className="flex flex-col gap-2">
-                <span className="font-label-xl text-[13px] text-outline uppercase tracking-wider">
-                  YOUR LOCAL DEVICE FOOTPRINT
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
-                    <span className="block font-label-md text-[10px] text-outline uppercase">Viewed History</span>
-                    <span className="block font-headline-xl text-[26px] text-primary uppercase leading-tight">{totalMemesViewed}</span>
-                  </div>
-                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
-                    <span className="block font-label-md text-[10px] text-outline uppercase">Vault Saved</span>
-                    <span className="block font-headline-xl text-[26px] text-secondary-container uppercase leading-tight">
-                      {favorites.length}{!isPro ? `/${FREE_VAULT_LIMIT}` : ''}
+              {/* TAB 1: CAPSULE EXPERIENCE & CUSTOMIZATION */}
+              {settingsTab === 'experience' && (
+                <div className="flex flex-col gap-3 animate-in fade-in duration-150">
+                  {/* Feed Experience Toggles */}
+                  <div className="flex flex-col gap-2">
+                    <span className="font-label-xl text-[13px] text-secondary-container uppercase tracking-wider flex items-center gap-1.5">
+                      <Zap size={15} />
+                      <span>FEED & DROP BEHAVIOUR</span>
                     </span>
-                  </div>
-                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
-                    <span className="block font-label-md text-[10px] text-outline uppercase">Mood Boards</span>
-                    <span className="block font-headline-xl text-[26px] text-tertiary uppercase leading-tight">{moodBoards.length}</span>
-                  </div>
-                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 text-center shadow-[2px_2px_0px_0px_#000]">
-                    <span className="block font-label-md text-[10px] text-outline uppercase">Blocked Memes</span>
-                    <span className="block font-headline-xl text-[26px] text-white uppercase leading-tight">{blockedMemesCount}</span>
-                  </div>
-                </div>
-              </div>
 
-              {/* 2. Data & Past History Deletion Center */}
-              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-label-xl text-[14px] text-tertiary uppercase tracking-wider flex items-center gap-1.5">
-                    <Trash2 size={16} />
-                    <span>HISTORY & DATA ERASURE</span>
-                  </span>
-                  <span className="font-label-md text-[10px] text-outline uppercase">100% ON-DEVICE</span>
-                </div>
-
-                {/* Clear Past Viewing History Only */}
-                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-[3px_3px_0px_0px_#000]">
-                  <div className="flex flex-col">
-                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                      CLEAR PAST VIEWING HISTORY & STATS
-                    </span>
-                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
-                      Resets viewed/fetched counters ({totalMemesViewed}), liked memes ({likedMemes.length}), reactions, and swipe history while keeping your Vault & Mood Boards safe.
-                    </span>
-                  </div>
-                  {confirmWipeMode === 'history' ? (
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* Hybrid Reddit Relay Stream */}
+                    <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between gap-3 shadow-[2px_2px_0px_0px_#000]">
+                      <div className="flex flex-col">
+                        <span className="font-label-xl text-[14px] text-white uppercase font-bold">
+                          HYBRID REDDIT RELAY STREAM
+                        </span>
+                        <span className="font-sans text-[11px] text-neutral-400 leading-snug">
+                          Mixes fresh SFW Reddit memes every 3rd drop alongside the curated D1 Vault.
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={handleClearViewHistory}
-                        className="bg-[#ff2a2a] text-white border-[2px] border-black px-3 py-1.5 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                        onClick={toggleRedditStream}
+                        className={`w-[60px] h-[32px] border-[2px] border-black font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                          redditStreamEnabled
+                            ? 'bg-[#34c759] text-black font-bold'
+                            : 'bg-surface-container-high text-outline'
+                        }`}
                       >
-                        CONFIRM
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmWipeMode('none')}
-                        className="bg-surface-container-high text-white border-[2px] border-outline px-2.5 py-1.5 font-label-xl text-[12px] uppercase cursor-pointer"
-                      >
-                        CANCEL
+                        {redditStreamEnabled ? 'ON' : 'OFF'}
                       </button>
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmWipeMode('history')}
-                      className="bg-surface-container-high hover:bg-primary text-white border-[2px] border-outline px-3.5 py-2 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0 cursor-pointer flex items-center gap-1.5 justify-center"
-                    >
-                      <RotateCcw size={14} />
-                      <span>CLEAR HISTORY</span>
-                    </button>
-                  )}
-                </div>
 
-                {/* Clear Saved Vault & Mood Boards */}
-                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-[3px_3px_0px_0px_#000]">
-                  <div className="flex flex-col">
-                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                      EMPTY MEME VAULT & MOOD BOARDS
-                    </span>
-                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
-                      Removes all {favorites.length} saved Vault memes and {moodBoards.length} custom Mood Boards from local storage.
-                    </span>
-                  </div>
-                  {confirmWipeMode === 'vault' ? (
-                    <div className="flex items-center gap-2 shrink-0">
+                    {/* 7-Meme Turbo Prefetch Buffer */}
+                    <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between gap-3 shadow-[2px_2px_0px_0px_#000]">
+                      <div className="flex flex-col">
+                        <span className="font-label-xl text-[14px] text-white uppercase font-bold">
+                          7-MEME TURBO PREFETCH BUFFER
+                        </span>
+                        <span className="font-sans text-[11px] text-neutral-400 leading-snug">
+                          Preloads up to 7 capsules for zero-latency swiping. Turn off to save data.
+                        </span>
+                      </div>
                       <button
                         type="button"
-                        onClick={handleClearVaultAndBoards}
-                        className="bg-[#ff2a2a] text-white border-[2px] border-black px-3 py-1.5 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                        onClick={togglePrefetchBuffer}
+                        className={`w-[60px] h-[32px] border-[2px] border-black font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                          prefetchEnabled
+                            ? 'bg-[#34c759] text-black font-bold'
+                            : 'bg-surface-container-high text-outline'
+                        }`}
                       >
-                        CONFIRM
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmWipeMode('none')}
-                        className="bg-surface-container-high text-white border-[2px] border-outline px-2.5 py-1.5 font-label-xl text-[12px] uppercase cursor-pointer"
-                      >
-                        CANCEL
+                        {prefetchEnabled ? 'ON' : 'OFF'}
                       </button>
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmWipeMode('vault')}
-                      className="bg-surface-container-high hover:bg-tertiary text-white border-[2px] border-outline px-3.5 py-2 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0 cursor-pointer flex items-center gap-1.5 justify-center"
-                    >
-                      <Trash2 size={14} />
-                      <span>EMPTY VAULT</span>
-                    </button>
-                  )}
-                </div>
 
-                {/* Reset Blocked Memes List */}
-                {blockedMemesCount > 0 && (
-                  <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-[3px_3px_0px_0px_#000]">
-                    <div className="flex flex-col">
-                      <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                        UNBLOCK REPORTED MEMES ({blockedMemesCount})
+                    {/* Card Shake & Recoil */}
+                    <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between gap-3 shadow-[2px_2px_0px_0px_#000]">
+                      <div className="flex flex-col">
+                        <span className="font-label-xl text-[14px] text-white uppercase font-bold">
+                          CARD RECOIL & SHAKE EFFECTS
+                        </span>
+                        <span className="font-sans text-[11px] text-neutral-400 leading-snug">
+                          Physical arcade recoil when double-tapping or stamping reactions.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleShakeEffects}
+                        className={`w-[60px] h-[32px] border-[2px] border-black font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
+                          shakeEffectsEnabled
+                            ? 'bg-[#34c759] text-black font-bold'
+                            : 'bg-surface-container-high text-outline'
+                        }`}
+                      >
+                        {shakeEffectsEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Arcade FX Style Selector */}
+                  <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex flex-col gap-2 shadow-[2px_2px_0px_0px_#000]">
+                    <div className="flex items-center justify-between">
+                      <span className="font-label-xl text-[14px] text-white uppercase font-bold">
+                        ARCADE CARD RECOIL FX
                       </span>
-                      <span className="font-sans text-[12px] text-neutral-400 leading-snug">
-                        Clears your local blocklist so previously hidden memes can appear again.
+                      <span className="font-label-md text-[10px] text-outline uppercase">
+                        {entitlements.grants.has('fx_arcade') ? 'PACK UNLOCKED' : '1 OF 4 UNLOCKED'}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleClearBlockedMemes}
-                      className="bg-surface-container-high hover:bg-secondary-container hover:text-black text-white border-[2px] border-outline px-3.5 py-2 font-label-xl text-[12px] uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all shrink-0 cursor-pointer"
-                    >
-                      UNBLOCK ALL
-                    </button>
-                  </div>
-                )}
-
-                {/* Master Delete All App History & Data Button */}
-                <div className="bg-[#2a1215] border-[3px] border-[#ff2a2a] p-3.5 flex flex-col gap-2.5 shadow-[4px_4px_0px_0px_#ff2a2a]">
-                  <div className="flex flex-col">
-                    <span className="font-headline-lg-mobile text-[20px] text-[#ff4d4d] uppercase leading-none">
-                      DELETE ALL APP HISTORY & DATA
-                    </span>
-                    <span className="font-sans text-[12px] text-neutral-300 mt-1 leading-snug">
-                      Permanently erases all past viewing history, swipe logs, liked memes, saved Vault items, Mood Boards, and local cache from this device.
-                    </span>
-                  </div>
-                  {confirmWipeMode === 'all' ? (
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={handleWipeAllAppData}
-                        className="flex-1 bg-[#ff2a2a] text-white border-[2px] border-black py-2.5 px-4 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer font-bold"
-                      >
-                        ⚠️ YES, DELETE EVERYTHING NOW
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmWipeMode('none')}
-                        className="bg-surface-container-high text-white border-[2px] border-outline py-2.5 px-4 font-label-xl text-[14px] uppercase cursor-pointer"
-                      >
-                        CANCEL
-                      </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['classic', 'retro_slam', 'neon_glitch', 'cassette_pop'] as ArcadeFxStyle[]).map((styleId) => {
+                        const isOwned = styleId === 'classic' || entitlements.grants.has('fx_arcade');
+                        const isSelected = activeFx === styleId;
+                        const cfg = ARCADE_FX_STYLES[styleId];
+                        return (
+                          <button
+                            key={styleId}
+                            type="button"
+                            onClick={() => {
+                              if (isOwned) {
+                                setActiveFx(styleId);
+                              } else {
+                                openStore({ focus: PRODUCTS.FX_ARCADE });
+                              }
+                            }}
+                            className={`border-2 p-2 font-label-md text-[11px] uppercase flex items-center justify-between cursor-pointer ${
+                              isSelected
+                                ? 'bg-primary-container text-white border-black font-bold shadow-[2px_2px_0_#000]'
+                                : isOwned
+                                ? 'bg-[#1c1b1b] text-neutral-300 border-outline hover:text-white'
+                                : 'bg-[#161616] text-neutral-500 border-neutral-700'
+                            }`}
+                          >
+                            <span>{cfg.name}</span>
+                            <span>{isOwned ? (isSelected ? '✓' : '') : '🔒'}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                  ) : (
+                  </div>
+
+                  {/* App Color Themes */}
+                  <ThemePicker onOpenStore={(focus) => openStore({ focus })} />
+                </div>
+              )}
+
+              {/* TAB 2: MEMBERSHIP & STORE */}
+              {settingsTab === 'membership' && (
+                <div className="flex flex-col gap-3 animate-in fade-in duration-150">
+                  {/* Hero Store Card */}
+                  <div className="bg-gradient-to-br from-[#241d08] via-[#1c1b1b] to-[#141414] border-[3px] border-[#f4c300] shadow-[4px_4px_0px_0px_#000] p-3.5 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Crown size={18} className="text-[#f4c300]" />
+                        <span className="font-headline-xl text-[20px] text-white uppercase tracking-tight">
+                          CAPSULE STORE
+                        </span>
+                      </div>
+                      <span className="font-label-md text-[10px] bg-[#f4c300] text-black px-1.5 py-0.5 border border-black uppercase font-extrabold">
+                        ONE-TIME UNLOCKS
+                      </span>
+                    </div>
+                    <p className="font-sans text-[12px] text-neutral-300 leading-snug">
+                      Unlock Remove Ads, Unlimited Mood Boards, and the flagship Combo Pack. All purchases are permanent and bound to your Google Play account.
+                    </p>
                     <button
                       type="button"
-                      onClick={() => setConfirmWipeMode('all')}
-                      className="w-full bg-[#ff2a2a] hover:brightness-110 text-white border-[2px] border-black py-2.5 px-4 font-label-xl text-[15px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-2 cursor-pointer font-bold"
+                      onClick={() => openStore()}
+                      className="w-full mt-1 bg-[#f4c300] hover:bg-[#ffe399] text-black border-[2px] border-black py-2.5 font-label-xl text-[13px] uppercase font-extrabold shadow-[3px_3px_0_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
-                      <Trash2 size={17} />
-                      <span>DELETE ALL PAST HISTORY & DATA</span>
+                      <Sparkles size={16} strokeWidth={2.5} />
+                      <span>OPEN CAPSULE STORE</span>
                     </button>
-                  )}
-                </div>
-              </div>
-
-              {/* 3. Feed & Capsule Experience Preferences */}
-              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-3">
-                <span className="font-label-xl text-[14px] text-secondary-container uppercase tracking-wider flex items-center gap-1.5">
-                  <Zap size={16} />
-                  <span>CAPSULE FEED & EXPERIENCE</span>
-                </span>
-
-                {/* Toggle 1: Auxiliary Reddit Stream */}
-                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between gap-3 shadow-[3px_3px_0px_0px_#000]">
-                  <div className="flex flex-col">
-                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                      HYBRID REDDIT RELAY STREAM
-                    </span>
-                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
-                      Mixes fresh SFW Reddit memes every 3rd drop alongside the curated Meme Capsule D1 Vault.
-                    </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={toggleRedditStream}
-                    className={`w-[68px] h-[36px] border-[2px] border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
-                      redditStreamEnabled
-                        ? 'bg-[#34c759] text-black font-bold'
-                        : 'bg-surface-container-high text-outline'
-                    }`}
-                  >
-                    {redditStreamEnabled ? 'ON' : 'OFF'}
-                  </button>
-                </div>
 
-                {/* Toggle 2: 7-Meme Turbo Prefetch Buffer */}
-                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between gap-3 shadow-[3px_3px_0px_0px_#000]">
-                  <div className="flex flex-col">
-                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                      7-MEME TURBO PREFETCH BUFFER
-                    </span>
-                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
-                      Preloads up to 7 capsules in the background for zero-latency swiping. Turn off to save mobile data.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={togglePrefetchBuffer}
-                    className={`w-[68px] h-[36px] border-[2px] border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
-                      prefetchEnabled
-                        ? 'bg-[#34c759] text-black font-bold'
-                        : 'bg-surface-container-high text-outline'
-                    }`}
-                  >
-                    {prefetchEnabled ? 'ON' : 'OFF'}
-                  </button>
-                </div>
+                  {/* Quick Membership Actions Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      disabled={isPurchasing}
+                      onClick={() => void restorePurchases()}
+                      className="bg-surface-container-low hover:bg-surface-container-high text-white border-[2px] border-outline p-3 font-label-xl text-[12px] uppercase shadow-[2px_2px_0_#000] flex flex-col items-center justify-center gap-1.5 text-center disabled:opacity-50 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 transition-all"
+                    >
+                      <RotateCcw size={18} className="text-[#9b30ff]" />
+                      <span>{isPurchasing ? 'CHECKING…' : 'RESTORE PURCHASES'}</span>
+                    </button>
 
-                {/* Toggle 3: Card Shake & Recoil Animations */}
-                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between gap-3 shadow-[3px_3px_0px_0px_#000]">
-                  <div className="flex flex-col">
-                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                      CARD RECOIL & SHAKE EFFECTS
-                    </span>
-                    <span className="font-sans text-[12px] text-neutral-400 leading-snug">
-                      Physical arcade card shake when double-tapping or stamping reactions on a meme.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={toggleShakeEffects}
-                    className={`w-[68px] h-[36px] border-[2px] border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0px_0px_#000] transition-all shrink-0 cursor-pointer flex items-center justify-center ${
-                      shakeEffectsEnabled
-                        ? 'bg-[#34c759] text-black font-bold'
-                        : 'bg-surface-container-high text-outline'
-                    }`}
-                  >
-                    {shakeEffectsEnabled ? 'ON' : 'OFF'}
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsRatingModalOpen(true)}
+                      className="bg-surface-container-low hover:bg-surface-container-high text-white border-[2px] border-outline p-3 font-label-xl text-[12px] uppercase shadow-[2px_2px_0_#000] flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer active:translate-x-0.5 active:translate-y-0.5 transition-all"
+                    >
+                      <Star size={18} className="text-[#f4c300]" />
+                      <span>RATE ON PLAY STORE</span>
+                    </button>
 
-                {/* Toggle 4: Arcade FX Style Selector */}
-                <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col gap-2 shadow-[3px_3px_0px_0px_#000]">
-                  <div className="flex items-center justify-between">
-                    <span className="font-label-xl text-[15px] text-white uppercase font-bold">
-                      ARCADE CARD RECOIL FX
-                    </span>
-                    <span className="font-label-md text-[10px] text-outline uppercase">
-                      {entitlements.grants.has('fx_arcade') ? 'PACK UNLOCKED' : '1 OF 4 UNLOCKED'}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsOnboardingOpen(true)}
+                      className="bg-surface-container-low hover:bg-surface-container-high text-white border-[2px] border-outline p-3 font-label-xl text-[12px] uppercase shadow-[2px_2px_0_#000] flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer active:translate-x-0.5 active:translate-y-0.5 transition-all"
+                    >
+                      <HelpCircle size={18} className="text-tertiary" />
+                      <span>REPLAY GESTURE TOUR</span>
+                    </button>
                   </div>
-                  <p className="font-sans text-[12px] text-neutral-400 leading-snug">
-                    Pick physical card recoil & impact styles on drop and reaction.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    {(['classic', 'retro_slam', 'neon_glitch', 'cassette_pop'] as ArcadeFxStyle[]).map((styleId) => {
-                      const isOwned = styleId === 'classic' || entitlements.grants.has('fx_arcade');
-                      const isSelected = activeFx === styleId;
-                      const cfg = ARCADE_FX_STYLES[styleId];
-                      return (
+
+                  {/* Entitlement Status Card */}
+                  <div className="p-3 bg-black/40 border-[2px] border-outline/40 space-y-2 text-[12px]">
+                    <span className="font-label-md text-[10px] text-neutral-400 uppercase tracking-widest block font-bold">
+                      YOUR ACCOUNT ENTITLEMENTS
+                    </span>
+                    <div className="flex items-center justify-between text-neutral-300">
+                      <span>ADS STATUS:</span>
+                      <strong className={entitlements.adsRemoved ? 'text-[#ceff8c]' : 'text-neutral-400'}>
+                        {entitlements.adsRemoved ? 'REMOVED ✓' : 'STANDARD'}
+                      </strong>
+                    </div>
+                    <div className="flex items-center justify-between text-neutral-300">
+                      <span>MOOD BOARDS:</span>
+                      <strong className={entitlements.unlimitedBoards ? 'text-[#ceff8c]' : 'text-neutral-400'}>
+                        {entitlements.unlimitedBoards ? 'UNLIMITED ✓' : 'FREE CAP (3)'}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: PRIVACY & DATA */}
+              {settingsTab === 'privacy' && (
+                <div className="flex flex-col gap-3 animate-in fade-in duration-150">
+                  {/* Local Device Footprint Counters */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="font-label-xl text-[12px] text-outline uppercase tracking-wider">
+                      LOCAL DEVICE FOOTPRINT
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <div className="bg-surface-container-low border-[2px] border-outline p-2 text-center shadow-[2px_2px_0px_0px_#000]">
+                        <span className="block font-label-md text-[9px] text-outline uppercase truncate">Viewed</span>
+                        <span className="block font-headline-xl text-[20px] text-primary uppercase leading-tight">{totalMemesViewed}</span>
+                      </div>
+                      <div className="bg-surface-container-low border-[2px] border-outline p-2 text-center shadow-[2px_2px_0px_0px_#000]">
+                        <span className="block font-label-md text-[9px] text-outline uppercase truncate">Saved</span>
+                        <span className="block font-headline-xl text-[20px] text-secondary-container uppercase leading-tight">
+                          {favorites.length}{!isPro ? `/${FREE_VAULT_LIMIT}` : ''}
+                        </span>
+                      </div>
+                      <div className="bg-surface-container-low border-[2px] border-outline p-2 text-center shadow-[2px_2px_0px_0px_#000]">
+                        <span className="block font-label-md text-[9px] text-outline uppercase truncate">Boards</span>
+                        <span className="block font-headline-xl text-[20px] text-tertiary uppercase leading-tight">{moodBoards.length}</span>
+                      </div>
+                      <div className="bg-surface-container-low border-[2px] border-outline p-2 text-center shadow-[2px_2px_0px_0px_#000]">
+                        <span className="block font-label-md text-[9px] text-outline uppercase truncate">Blocked</span>
+                        <span className="block font-headline-xl text-[20px] text-white uppercase leading-tight">{blockedMemesCount}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Data Erasure Actions */}
+                  <div className="flex flex-col gap-2 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-label-xl text-[13px] text-tertiary uppercase tracking-wider flex items-center gap-1.5">
+                        <Trash2 size={15} />
+                        <span>HISTORY & DATA ERASURE</span>
+                      </span>
+                      <span className="font-label-md text-[10px] text-outline uppercase">100% ON-DEVICE</span>
+                    </div>
+
+                    {/* Clear Viewing History */}
+                    <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between gap-2 shadow-[2px_2px_0px_0px_#000]">
+                      <div className="flex flex-col">
+                        <span className="font-label-xl text-[13px] text-white uppercase font-bold">
+                          CLEAR VIEWING HISTORY
+                        </span>
+                        <span className="font-sans text-[11px] text-neutral-400 leading-snug">
+                          Resets viewed/like stats while keeping your Vault & Mood Boards safe.
+                        </span>
+                      </div>
+                      {confirmWipeMode === 'history' ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleClearViewHistory}
+                            className="bg-[#ff2a2a] text-white border-[2px] border-black px-2.5 py-1 font-label-xl text-[11px] uppercase shadow-[1px_1px_0_#000] cursor-pointer"
+                          >
+                            CONFIRM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmWipeMode('none')}
+                            className="bg-neutral-800 text-white border border-outline px-2 py-1 font-label-xl text-[11px] uppercase cursor-pointer"
+                          >
+                            CANCEL
+                          </button>
+                        </div>
+                      ) : (
                         <button
-                          key={styleId}
+                          type="button"
+                          onClick={() => setConfirmWipeMode('history')}
+                          className="bg-surface-container-high hover:bg-primary text-white border-[2px] border-outline px-3 py-1.5 font-label-xl text-[11px] uppercase shadow-[2px_2px_0_#000] shrink-0 cursor-pointer"
+                        >
+                          CLEAR
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Empty Vault & Boards */}
+                    <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between gap-2 shadow-[2px_2px_0px_0px_#000]">
+                      <div className="flex flex-col">
+                        <span className="font-label-xl text-[13px] text-white uppercase font-bold">
+                          EMPTY VAULT & BOARDS
+                        </span>
+                        <span className="font-sans text-[11px] text-neutral-400 leading-snug">
+                          Removes all saved Vault memes ({favorites.length}) and custom Mood Boards ({moodBoards.length}).
+                        </span>
+                      </div>
+                      {confirmWipeMode === 'vault' ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={handleClearVaultAndBoards}
+                            className="bg-[#ff2a2a] text-white border-[2px] border-black px-2.5 py-1 font-label-xl text-[11px] uppercase shadow-[1px_1px_0_#000] cursor-pointer"
+                          >
+                            CONFIRM
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmWipeMode('none')}
+                            className="bg-neutral-800 text-white border border-outline px-2 py-1 font-label-xl text-[11px] uppercase cursor-pointer"
+                          >
+                            CANCEL
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmWipeMode('vault')}
+                          className="bg-surface-container-high hover:bg-tertiary text-white border-[2px] border-outline px-3 py-1.5 font-label-xl text-[11px] uppercase shadow-[2px_2px_0_#000] shrink-0 cursor-pointer"
+                        >
+                          EMPTY
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Unblock Reported Memes */}
+                    {blockedMemesCount > 0 && (
+                      <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between gap-2 shadow-[2px_2px_0px_0px_#000]">
+                        <div className="flex flex-col">
+                          <span className="font-label-xl text-[13px] text-white uppercase font-bold">
+                            UNBLOCK REPORTED MEMES ({blockedMemesCount})
+                          </span>
+                          <span className="font-sans text-[11px] text-neutral-400 leading-snug">
+                            Clears your local blocklist so previously hidden memes can appear again.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearBlockedMemes}
+                          className="bg-surface-container-high hover:bg-secondary-container hover:text-black text-white border-[2px] border-outline px-3 py-1.5 font-label-xl text-[11px] uppercase shadow-[2px_2px_0_#000] shrink-0 cursor-pointer"
+                        >
+                          UNBLOCK ALL
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Master Delete All App Data */}
+                    <div className="bg-[#2a1215] border-[2px] border-[#ff2a2a] p-3 flex flex-col gap-2 shadow-[3px_3px_0px_0px_#ff2a2a]">
+                      <div className="flex flex-col">
+                        <span className="font-headline-lg-mobile text-[16px] text-[#ff4d4d] uppercase leading-none">
+                          DELETE ALL APP HISTORY & DATA
+                        </span>
+                        <span className="font-sans text-[11px] text-neutral-300 mt-0.5 leading-snug">
+                          Permanently wipes all history, favorites, mood boards, and cache from this device.
+                        </span>
+                      </div>
+                      {confirmWipeMode === 'all' ? (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleWipeAllAppData}
+                            className="flex-1 bg-[#ff2a2a] text-white border-[2px] border-black py-2 px-3 font-label-xl text-[12px] uppercase shadow-[2px_2px_0_#000] cursor-pointer font-bold"
+                          >
+                            ⚠️ YES, DELETE ALL
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmWipeMode('none')}
+                            className="bg-neutral-800 text-white border border-outline py-2 px-3 font-label-xl text-[12px] uppercase cursor-pointer"
+                          >
+                            CANCEL
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmWipeMode('all')}
+                          className="w-full bg-[#ff2a2a] hover:brightness-110 text-white border-[2px] border-black py-2 px-3 font-label-xl text-[12px] uppercase shadow-[2px_2px_0_#000] transition-all flex items-center justify-center gap-1.5 cursor-pointer font-bold"
+                        >
+                          <Trash2 size={14} />
+                          <span>DELETE ALL APP DATA</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Analytics Consent Management Card */}
+                  <div className="bg-surface-container-low border-[2px] border-outline p-3 flex flex-col gap-2.5 shadow-[2px_2px_0_#000]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-purple-950/60 border border-purple-800/60 p-1.5 text-purple-400">
+                          <BarChart3 size={16} />
+                        </div>
+                        <div>
+                          <span className="font-label-xl text-[13px] text-white uppercase block font-bold">
+                            ANALYTICS & TELEMETRY
+                          </span>
+                          <span className="font-sans text-[10px] text-neutral-400 block">
+                            Schema v1 • 64-char SHA-256 install hash • Zero PII
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`font-label-md text-[10px] px-2 py-0.5 uppercase font-bold border ${
+                        consent.analytics_consent === 'granted'
+                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-700'
+                          : 'bg-red-950/80 text-red-400 border-red-700'
+                      }`}>
+                        {consent.analytics_consent === 'granted' ? 'GRANTED ✓' : 'DENIED ✗'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-outline/30">
+                      <span className="font-sans text-[11px] text-neutral-400">
+                        {consent.analytics_consent === 'granted'
+                          ? 'Anonymous metrics are actively helping improve humor curation.'
+                          : 'All analytics collection and uploads are blocked.'}
+                      </span>
+                      {consent.analytics_consent === 'granted' ? (
+                        <button
                           type="button"
                           onClick={() => {
-                            if (isOwned) {
-                              setActiveFx(styleId);
-                            } else {
-                              openStore({ focus: PRODUCTS.FX_ARCADE });
-                            }
+                            updateConsent(false, consent.advertising_consent === 'granted');
+                            showToast('ANALYTICS REVOKED. QUEUE PURGED.', 'tertiary');
                           }}
-                          className={`border-2 p-2 font-label-md text-[12px] uppercase flex items-center justify-between cursor-pointer ${
-                            isSelected
-                              ? 'bg-primary-container text-white border-black font-bold shadow-[2px_2px_0_#000]'
-                              : isOwned
-                              ? 'bg-[#1c1b1b] text-neutral-300 border-outline hover:text-white'
-                              : 'bg-[#161616] text-neutral-500 border-neutral-700'
-                          }`}
+                          className="bg-neutral-800 hover:bg-neutral-700 text-red-400 border border-red-800/60 px-2.5 py-1 font-label-xl text-[11px] uppercase cursor-pointer shrink-0 transition-colors"
                         >
-                          <span>{cfg.name}</span>
-                          <span>{isOwned ? (isSelected ? '✓' : '') : '🔒'}</span>
+                          REVOKE
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Pro Membership & App Guide */}
-              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-2.5">
-                <span className="font-label-xl text-[14px] text-primary uppercase tracking-wider flex items-center gap-1.5">
-                  <Crown size={16} />
-                  <span>MEMBERSHIP & APP GUIDE</span>
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => openStore()}
-                    className="bg-secondary-container text-on-secondary-container border-[2px] border-background p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-between cursor-pointer font-bold"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Crown size={17} />
-                      <span>CAPSULE STORE</span>
-                    </div>
-                    <span className="text-[18px]">→</span>
-                  </button>
-
-                  <button type="button" disabled={isPurchasing} onClick={() => void restorePurchases()}
-                    className="bg-surface-container-high text-white border-[2px] border-outline p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0_#000] flex items-center justify-center gap-2 disabled:opacity-50">
-                    <RotateCcw size={17} /><span>{isPurchasing ? 'PLEASE WAIT…' : 'RESTORE PURCHASES'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsOnboardingOpen(true)}
-                    className="bg-surface-container-high hover:bg-primary text-white border-[2px] border-outline p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <HelpCircle size={17} />
-                    <span>REPLAY GESTURE TOUR</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsRatingModalOpen(true)}
-                    className="bg-surface-container-high hover:bg-secondary-container hover:text-black text-white border-[2px] border-outline p-3 font-label-xl text-[14px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Star size={17} className="text-secondary-container" />
-                    <span>RATE ON PLAY STORE</span>
-                  </button>
-                </div>
-              </div>
-
-              <ThemePicker onOpenStore={(focus) => openStore({ focus })} />
-
-              {/* 5. Privacy Policy, Support & Credits Section */}
-              <div className="border-t-[3px] border-outline pt-sm flex flex-col gap-2.5">
-                <span className="font-label-xl text-[14px] text-outline uppercase tracking-wider flex items-center gap-1.5">
-                  <Shield size={16} />
-                  <span>PRIVACY, LEGAL & ABOUT</span>
-                </span>
-
-                {/* Date of Birth Verification Status Card */}
-                <div className="w-full bg-surface-container-low border-[2px] border-outline p-3 flex items-center justify-between shadow-[2px_2px_0px_0px_#000]">
-                  <div className="flex items-center gap-2.5">
-                    <div className="bg-[#f4c300]/20 border border-[#f4c300] p-1.5 text-[#f4c300]">
-                      <Calendar size={18} />
-                    </div>
-                    <div>
-                      <span className="font-label-xl text-[13px] text-white uppercase block font-bold">
-                        AGE VERIFICATION (DOB)
-                      </span>
-                      <span className="font-sans text-[11px] text-neutral-400 block">
-                        {userDob ? `Verified (${userDob}) • Locked to device` : 'Verified (18+) • Single-entry locked'}
-                      </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateConsent(true, consent.advertising_consent === 'granted');
+                            showToast('ANALYTICS CONSENT GRANTED ✓', 'success');
+                          }}
+                          className="bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-600 px-2.5 py-1 font-label-xl text-[11px] uppercase cursor-pointer shrink-0 transition-colors font-bold"
+                        >
+                          GRANT
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <span className="font-label-md text-[10px] bg-[#152000] text-[#ceff8c] border border-[#7abb00] px-2 py-0.5 uppercase font-bold">
-                    LOCKED ✓
-                  </span>
-                </div>
 
-                <a
-                  href="https://memecapsule.wtf/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full bg-surface-container-low hover:bg-surface-container-high border-[2px] border-outline p-3.5 flex items-center justify-between shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 transition-all cursor-pointer text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary/20 border border-primary p-2 text-primary">
-                      <Shield size={20} />
+                  {/* Debug-Only Analytics Inspector (Development Only) */}
+                  {import.meta.env.DEV && (
+                    <div className="bg-surface-container-low border-[2px] border-outline overflow-hidden shadow-[2px_2px_0_#000]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          refreshDiagnostics();
+                          setIsDebugInspectorOpen(!isDebugInspectorOpen);
+                        }}
+                        className="w-full p-2.5 flex items-center justify-between text-left hover:bg-surface-container-high transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="bg-neutral-800 border border-outline p-1 text-primary">
+                            <Sliders size={15} />
+                          </div>
+                          <div>
+                            <span className="font-label-xl text-[12px] text-white uppercase font-bold flex items-center gap-2">
+                              <span>ANALYTICS INSPECTOR (DEBUG)</span>
+                              <span className="text-[9px] bg-neutral-800 text-neutral-400 px-1 py-0.2 rounded font-mono">
+                                QUEUE: {diagnostics.queueCount}
+                              </span>
+                            </span>
+                            <span className="font-sans text-[10px] text-neutral-400 block">
+                              SQLite offline queue status & network backoff metrics
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-label-md text-[11px] text-neutral-400">
+                          {isDebugInspectorOpen ? 'HIDE ▲' : 'VIEW ▼'}
+                        </span>
+                      </button>
+
+                      {isDebugInspectorOpen && (
+                        <div className="p-3 border-t border-outline/40 bg-neutral-950/70 flex flex-col gap-2.5 text-xs animate-in fade-in duration-150">
+                          <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
+                            <div className="bg-surface-container p-2 border border-outline/40">
+                              <span className="text-neutral-500 block text-[9px] uppercase">Pending Queue</span>
+                              <span className="text-white text-[13px] font-bold">{diagnostics.queueCount} events</span>
+                            </div>
+                            <div className="bg-surface-container p-2 border border-outline/40">
+                              <span className="text-neutral-500 block text-[9px] uppercase">Accepted by Server</span>
+                              <span className="text-emerald-400 text-[13px] font-bold">{diagnostics.acceptedCount}</span>
+                            </div>
+                            <div className="bg-surface-container p-2 border border-outline/40">
+                              <span className="text-neutral-500 block text-[9px] uppercase">Rejected (HTTP 400)</span>
+                              <span className="text-amber-400 text-[13px] font-bold">{diagnostics.rejectedCount}</span>
+                            </div>
+                            <div className="bg-surface-container p-2 border border-outline/40">
+                              <span className="text-neutral-500 block text-[9px] uppercase">Dropped (Queue Limit)</span>
+                              <span className="text-red-400 text-[13px] font-bold">{diagnostics.droppedCount}</span>
+                            </div>
+                          </div>
+
+                          <div className="bg-surface-container p-2 border border-outline/40 font-mono text-[10px] space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-neutral-500 uppercase">Last Flush UTC:</span>
+                              <span className="text-neutral-300 truncate max-w-[200px]">
+                                {diagnostics.lastFlushTimeUtc || 'Never'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-neutral-500 uppercase">Last Error:</span>
+                              <span className={`truncate max-w-[200px] ${diagnostics.lastError ? 'text-red-400' : 'text-neutral-400'}`}>
+                                {diagnostics.lastError || 'None'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await flushQueue();
+                                showToast('ANALYTICS QUEUE FLUSH TRIGGERED', 'primary');
+                              }}
+                              className="flex-1 bg-purple-900/60 hover:bg-purple-800 text-white border border-purple-600 py-1.5 px-2 font-label-xl text-[11px] uppercase text-center cursor-pointer transition-colors"
+                            >
+                              FLUSH QUEUE NOW
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                refreshDiagnostics();
+                                showToast('DIAGNOSTICS REFRESHED', 'secondary');
+                              }}
+                              className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-outline py-1.5 px-2.5 font-label-xl text-[11px] uppercase cursor-pointer flex items-center gap-1"
+                            >
+                              <RefreshCw size={12} />
+                              <span>REFRESH</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <span className="font-label-xl text-[15px] text-white uppercase block font-bold">
-                        PRIVACY POLICY & TERMS
+                  )}
+
+                  {/* Legal, DOB & About */}
+                  <div className="border-t border-outline/40 pt-2 flex flex-col gap-2">
+                    {/* DOB Card */}
+                    <div className="bg-surface-container-low border-[2px] border-outline p-2.5 flex items-center justify-between shadow-[2px_2px_0_#000]">
+                      <div className="flex items-center gap-2">
+                        <div className="bg-[#f4c300]/20 border border-[#f4c300] p-1 text-[#f4c300]">
+                          <Calendar size={16} />
+                        </div>
+                        <div>
+                          <span className="font-label-xl text-[12px] text-white uppercase block font-bold">
+                            AGE VERIFICATION (DOB)
+                          </span>
+                          <span className="font-sans text-[10px] text-neutral-400 block">
+                            {userDob ? `Verified (${userDob}) • Locked` : 'Verified (18+) • Single-entry locked'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="font-label-md text-[9px] bg-[#152000] text-[#ceff8c] border border-[#7abb00] px-1.5 py-0.5 uppercase font-bold">
+                        LOCKED ✓
                       </span>
-                      <span className="font-sans text-[12px] text-neutral-400 block">
-                        memecapsule.wtf/privacy • Official privacy policy & legal disclosures
-                      </span>
+                    </div>
+
+                    {/* Privacy Policy */}
+                    <a
+                      href="https://memecapsule.wtf/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-surface-container-low hover:bg-surface-container-high border-[2px] border-outline p-2.5 flex items-center justify-between shadow-[2px_2px_0_#000] transition-all cursor-pointer text-left"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="bg-primary/20 border border-primary p-1 text-primary">
+                          <Shield size={16} />
+                        </div>
+                        <div>
+                          <span className="font-label-xl text-[13px] text-white uppercase block font-bold">
+                            PRIVACY POLICY & TERMS
+                          </span>
+                          <span className="font-sans text-[11px] text-neutral-400 block">
+                            memecapsule.wtf/privacy
+                          </span>
+                        </div>
+                      </div>
+                      <ExternalLink size={15} className="text-secondary-container shrink-0" />
+                    </a>
+
+                    <div className="flex items-center justify-between px-1 text-[10px] font-label-md text-outline uppercase">
+                      <span>MEME CAPSULE v3.8 (BUILD 29)</span>
+                      <span>ANTI-ALGORITHM ENTERTAINMENT</span>
                     </div>
                   </div>
-                  <ExternalLink size={18} className="text-secondary-container shrink-0" />
-                </a>
-
-                <div className="flex items-center justify-between px-1 pt-1 text-[11px] font-label-md text-outline uppercase">
-                  <span>MEME CAPSULE v3.6 (BUILD 27)</span>
-                  <span>ANTI-ALGORITHM ENTERTAINMENT</span>
                 </div>
-              </div>
+              )}
             </div>
           </section>
         )}
@@ -3893,7 +4063,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
               setActiveTab('home');
             }
           }}
-          className={`rounded-none h-[46px] px-7 sm:px-9 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+          className={`rounded-none h-[46px] px-5 sm:px-7 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
             activeTab === 'home'
               ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
               : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
@@ -3901,7 +4071,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
           style={{ touchAction: 'manipulation' }}
           title="Home"
         >
-          <Home size={24} strokeWidth={2.5} />
+          <Home size={22} strokeWidth={2.5} />
         </button>
         <button
           type="button"
@@ -3909,7 +4079,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
             setShowMoreMenu(false);
             setActiveTab('favorites');
           }}
-          className={`rounded-none h-[46px] px-7 sm:px-9 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+          className={`rounded-none h-[46px] px-5 sm:px-7 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
             activeTab === 'favorites'
               ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
               : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
@@ -3917,7 +4087,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
           style={{ touchAction: 'manipulation' }}
           title="Vault / Favorites"
         >
-          <Flame size={24} strokeWidth={2.5} />
+          <Flame size={22} strokeWidth={2.5} />
         </button>
         <button
           type="button"
@@ -3925,7 +4095,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
             setShowMoreMenu(false);
             setActiveTab('boards');
           }}
-          className={`rounded-none h-[46px] px-7 sm:px-9 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+          className={`rounded-none h-[46px] px-5 sm:px-7 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
             activeTab === 'boards'
               ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
               : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
@@ -3933,7 +4103,23 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
           style={{ touchAction: 'manipulation' }}
           title="Moodboards"
         >
-          <LayoutGrid size={22} strokeWidth={2.5} />
+          <LayoutGrid size={21} strokeWidth={2.5} />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShowMoreMenu(false);
+            setActiveTab('settings');
+          }}
+          className={`rounded-none h-[46px] px-5 sm:px-7 border-[2px] border-background flex items-center justify-center transition-all duration-100 cursor-pointer active:translate-x-0.5 active:translate-y-0.5 ${
+            activeTab === 'settings'
+              ? 'bg-primary text-on-primary shadow-[3px_3px_0px_0px_var(--color-secondary-container)]'
+              : 'bg-[#222121] text-outline border-outline/30 hover:bg-secondary-container hover:text-[#000]'
+          }`}
+          style={{ touchAction: 'manipulation' }}
+          title="Settings"
+        >
+          <Settings size={21} strokeWidth={2.5} />
         </button>
       </nav>
     </div>
