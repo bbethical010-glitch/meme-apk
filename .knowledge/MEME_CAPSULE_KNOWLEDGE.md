@@ -546,6 +546,7 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
   - Manages permission requests, token acquisition, and error handling with native platform detection guard (`Capacitor.isNativePlatform()`).
   - Automatically syncs newly registered FCM tokens to the Cloudflare Pages backend endpoint (`POST /api/notifications/register`).
   - Implements notification reception and action listeners (`pushNotificationActionPerformed`), dispatching custom window events (`meme_capsule_push_action`) and supporting deep-link navigation into `'home'`, `'favorites'`, `'boards'`, or `'settings'`.
+- **Build Artifacts:** Debug APK (`meme-capsule-debug.apk`, 14MB), Release APK (`app-release.apk` / `meme-capsule-latest.apk`, 5.8MB), and Release AAB (`app-release.aab`, 7.7MB) generated and committed to `builds/`.
 
 ---
 
