@@ -67,6 +67,7 @@ import RatingModal from './components/RatingModal';
 import DateOfBirthModal from './components/DateOfBirthModal';
 import { MemeStack, MemeStackRef } from './components/MemeStack';
 import { memeDimensionCache, computeCanvasDimensions, CanvasDimensions } from './utils/dimensions';
+import { initPushNotifications } from './services/pushNotifications';
 import type { Meme, MoodBoard, DismissDecision } from './types';
 
 export type { Meme, MoodBoard };
@@ -499,6 +500,21 @@ export default function App() {
       document.removeEventListener('selectstart', preventSelection);
       document.removeEventListener('copy', preventSelection);
     };
+  }, []);
+
+  // Firebase Cloud Messaging Push Notifications Initialization
+  useEffect(() => {
+    initPushNotifications((data) => {
+      if (data?.screen === 'favorites') {
+        setActiveTab('favorites');
+      } else if (data?.screen === 'boards') {
+        setActiveTab('boards');
+      } else if (data?.screen === 'settings') {
+        setActiveTab('settings');
+      } else if (data?.screen === 'home' || data?.screen === 'drop') {
+        setActiveTab('home');
+      }
+    });
   }, []);
 
   // Reaction state

@@ -8,6 +8,9 @@
       "style": "DARK",
       "backgroundColor": "#131313",
       "overlaysWebView": false
+    },
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
     }
   }
 }
