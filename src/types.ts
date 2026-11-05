@@ -10,6 +10,7 @@ export interface Meme {
   source?: 'Meme Capsule' | 'Reddit';
   savedAt?: number;
   likes?: number;
+  postLink?: string;
 }
 
 export interface MoodBoard {

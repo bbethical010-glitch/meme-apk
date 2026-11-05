@@ -4,6 +4,7 @@ import {
   Download,
   Flag,
   Share2,
+  Info,
 } from 'lucide-react';
 import type { Meme } from '../types';
 import { memeDimensionCache } from '../utils/dimensions';
@@ -32,6 +33,7 @@ interface MemeCardProps {
   onOpenBoardPicker?: () => void;
   isPinnedToBoard?: boolean;
   onOpenReport?: () => void;
+  onOpenRedditInfo?: (meme: Meme) => void;
   onImagePointerDown?: () => void;
   onImagePointerUp?: () => void;
 }
@@ -59,6 +61,7 @@ export const MemeCard: React.FC<MemeCardProps> = ({
   onOpenBoardPicker,
   isPinnedToBoard = false,
   onOpenReport,
+  onOpenRedditInfo,
   onImagePointerDown,
   onImagePointerUp,
 }) => {
@@ -298,39 +301,28 @@ export const MemeCard: React.FC<MemeCardProps> = ({
         )}
       </div>
 
-      {/* Bottom Label Strip (Reddit Attribution — Active Card Only) */}
-      {isActive && (
+      {/* Bottom Label Strip (Reddit Tag — Active Card Only) */}
+      {isActive && meme.source === 'Reddit' && (
         <div
-          className="absolute bottom-0 w-full z-30 flex items-center justify-between px-[16px] py-[10px] pointer-events-none"
+          className="absolute bottom-0 w-full z-30 flex items-center justify-end px-[16px] py-[10px] pointer-events-none"
           style={{
-            background: 'linear-gradient(transparent, rgba(13, 13, 13, 0.95))',
-            fontFamily: 'Oswald, sans-serif',
-            fontSize: '11px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            color: '#988ca1',
+            background: 'linear-gradient(transparent, rgba(13, 13, 13, 0.75))',
           }}
         >
-          {meme.source === 'Reddit' ? (
-            <div className="flex flex-col min-w-0 pr-2 max-w-[75%]">
-              <span className="text-white font-bold text-[13px] truncate leading-tight drop-shadow-[1px_1px_0px_#000]">
-                {meme.title || 'UNTITLED MASTERPIECE'}
-              </span>
-              <span className="text-[#988ca1] text-[10px] truncate leading-tight mt-0.5">
-                @{meme.author || 'reddit'} • r/{meme.subreddit}
-              </span>
-            </div>
-          ) : (
-            <div />
-          )}
-
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-            {meme.source === 'Reddit' && (
-              <span className="text-[9px] border border-outline/40 px-1 py-0.5 text-secondary">
-                REDDIT
-              </span>
-            )}
-          </div>
+          <button
+            type="button"
+            {...createTapProps(() => {
+              if (onOpenRedditInfo) {
+                onOpenRedditInfo(meme);
+              }
+            })}
+            className="pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 border-[2px] border-secondary-container bg-surface-container-lowest/90 text-secondary-container hover:bg-secondary-container hover:text-black font-label-md text-[10px] font-bold tracking-wider uppercase shadow-[2px_2px_0px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] transition-all cursor-pointer select-none"
+            title="View Reddit info"
+            aria-label="View Reddit meme information"
+          >
+            <span>REDDIT</span>
+            <Info size={11} className="stroke-[2.5]" />
+          </button>
         </div>
       )}
     </animated.div>

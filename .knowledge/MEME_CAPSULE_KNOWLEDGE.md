@@ -5,7 +5,7 @@
 > **Classification:** Living Project Context & Reusable AI Operating Reference Across All Codebases  
 > **App / System Name:** Meme Capsule  
 > **Android Package Identifier:** `com.meme.capsule`  
-> **Mobile App Version:** `v3.8` (`versionCode 29`) — Built APKs and AABs in `builds/` (`meme-capsule-v3.8.apk`, `meme-capsule-v3.8.aab`, `app-release.apk`) and `android/app/build/outputs/`  
+> **Mobile App Version:** `v3.8` (`versionCode 30`) — Built APKs and AABs in `builds/` (`meme-capsule-v3.8.apk`, `meme-capsule-v3.8.aab`, `app-release.apk`) and `android/app/build/outputs/`  
 > **Official Web Platform:** [https://memecapsule.wtf](https://memecapsule.wtf) (Vite / React Multi-Page Static Prerendered)  
 > **Serverless Edge Backend:** [https://meme-capsule-eww.pages.dev](https://meme-capsule-eww.pages.dev) (Cloudflare Pages, D1 SQLite, R2 CDN)  
 > **Project Team & Engineering Leadership:**  
@@ -300,6 +300,44 @@ The card deck is orchestrated by `MemeStack.tsx` using `@react-spring/web` and `
   - Because `MemeStack` attaches gesture handlers to the card with `touch-action: none`, standard click events can be swallowed during drag initiation.
   - The top-right `38px × 38px` Download & Share buttons and the bottom-right `34px × 34px` Report button execute on `onPointerDown` / `onTouchStart` with a `useRef` timestamp guard (250ms debounce) and `pointer-events-none` on inner SVG icons so touches register on the very first contact.
 
+### 3.4.1 Zero-Repetition Feed & Persistent Cross-Session Deduplication Engine (`src/App.tsx`)
+To permanently eliminate meme repetition across the ~700–800 active curated catalog without degrading swipe responsiveness:
+1. **Dual Persistent Cross-Session Seen Registries (`SEEN_MEMES_STORAGE_KEY` & `SEEN_MEME_IDS_STORAGE_KEY`):**
+   - Tracks seen meme image URLs in `localStorage` under `meme_capsule_seen_urls_v2` (with automatic backward compatibility migration from legacy `v1`).
+   - Tracks seen database UUIDs in `localStorage` under `meme_capsule_seen_ids_v2`.
+   - **Zero Premature Eviction**: No arbitrary size capping or halfway eviction (previous 650 cap removed). All viewed memes are retained across cold restarts, app updates, and background kills to mathematically guarantee 0% repetition until the user consumes 100% of the active catalog.
+   - Fully purged only when users deliberately trigger "Clear Past Viewing History & Stats" or "Delete All App History & Data" from the Settings tab.
+2. **Dynamic Server Exclusion Window (`getExcludeIdsForServer`):**
+   - Passes the last 50 seen database UUIDs (`?exclude=...`) to Cloudflare Pages `/api/random-meme`, allowing SQL-level exclusion (`m.id NOT IN (...)`) on the edge server.
+   - Dynamically appends any duplicate candidate IDs rejected during the active retry cycle so subsequent retries steer the database away from already-seen records.
+3. **Dual In-Flight Concurrency Locks (`inFlightUrlsRef` & `inFlightIdsRef`):**
+   - Pre-allocates in-flight lock sets for both URLs and UUIDs during the parallel 3-stream prefetch waves so concurrent background workers never fetch or preload duplicate cards.
+4. **Adaptive Retry Loop (`maxRetries = 35`) with Cycle Reset**:
+   - `fetchValidMeme()` validates each candidate against: (a) blocked/reported list, (b) active card, (c) live FIFO queue, (d) in-flight parallel fetches, and (e) persistent seen history by both image URL and unique database `id`.
+   - Expanded retry budget (up to 35 attempts) guarantees fresh memes even when >80% of the active catalog has been consumed.
+   - **Continuous Swiping & Catalog Exhaustion Fallback**: If a user consumes 100% of all active memes in the D1 database, the engine resets the seen history for Cycle 2, ensuring swiping is never blocked and the capsule is never depleted.
+5. **Strict Reddit Auxiliary Stream Isolation (`pref_reddit_stream` default `false`):**
+   - Defaults to 100% curated D1 vault memes. If backend network drops occur, the engine fails gracefully or falls back to curated vector vault cards instead of silently leaking Reddit's static 30-post hot pool when the user has disabled the auxiliary Reddit stream.
+6. **Edge Cache-Busting Nonces (`fetchBackendMemePayload`):**
+   - Appends timestamps (`_ts`) and cryptographic random nonces (`_nonce`) to bypass Android OkHttp and Cloudflare edge caches.
+
+### 3.4.2 Reddit Attribution & On-Demand Info Pop-up Modal (`src/RedditInfoModal.tsx`, `MemeCard.tsx`)
+To keep meme artwork completely clean and unobstructed while preserving full attribution and community context:
+1. **Uncluttered Meme Card Surface:** Removed burned-in bottom text overlay (`title`, `author`, `subreddit`) from the active card deck.
+2. **Interactive Reddit Tag Badge (`MemeCard.tsx`):**
+   - When viewing Reddit stream drops, a cyber-yellow neo-brutalist badge (`[ REDDIT ℹ ]`) is rendered in the bottom right corner.
+   - Equipped with instant single-tap gesture recognition (`createTapProps`) and debounced touch handler, with drag-cancellation guard in `MemeStack` so tapping never triggers accidental card swiping.
+3. **Neo-Brutalist Reddit Info Pop-up (`RedditInfoModal.tsx`):**
+   - Tapping the Reddit tag launches an accessible modal displaying:
+     - Framed thumbnail preview of the drop.
+     - Unabridged original post title with dynamic line wrapping.
+     - Origin community subreddit (`r/{subreddit}`).
+     - Author attribution (`u/{author}`).
+     - Upvote counter / community reception (`▲ {likes}`).
+     - Source tag (`REDDIT AUXILIARY RELAY`).
+     - "OPEN ON REDDIT" direct external link and prominent "CLOSE" CTA.
+   - Also integrated directly into the Favorites list so users can inspect Reddit drop intel from their saved vault.
+
 ### 3.5 Neo-Brutalist Viral Share Bottom Sheet & Social Dispatch System
 When the user taps Share (from the card overlay, bottom CTA bar, Meme Vault, or Mood Boards), the app opens `ShareModal.tsx`:
 1. **Payload & Promotional Message Preview:**
@@ -541,12 +579,21 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
 - **Plugin & Native Bridge:**
   - Integrated `@capacitor/push-notifications` (v8.1.3) with Capacitor 8 container.
   - Added Android 13+ runtime permission: `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />` in `android/app/src/main/AndroidManifest.xml`.
+  - Created Android high-importance notification channel `meme_capsule_drops` (importance 4, sound, badge, vibration).
   - Configured `google-services.json` in `android/app/google-services.json` and root, activating the Google Services Gradle plugin (`com.google.gms.google-services:4.4.4`).
-- **Push Notification Service (`src/services/pushNotifications.ts`):**
+- **Push Notification Service & Deep-Link Payload Engine (`src/services/pushNotifications.ts` & `src/App.tsx`):**
   - Manages permission requests, token acquisition, and error handling with native platform detection guard (`Capacitor.isNativePlatform()`).
-  - Automatically syncs newly registered FCM tokens to the Cloudflare Pages backend endpoint (`POST /api/notifications/register`).
-  - Implements notification reception and action listeners (`pushNotificationActionPerformed`), dispatching custom window events (`meme_capsule_push_action`) and supporting deep-link navigation into `'home'`, `'favorites'`, `'boards'`, or `'settings'`.
-- **Build Artifacts:** Debug APK (`meme-capsule-debug.apk`, 14MB), Release APK (`app-release.apk` / `meme-capsule-latest.apk`, 5.8MB), and Release AAB (`app-release.aab`, 7.7MB) generated and committed to `builds/`.
+  - Utilizes `CapacitorHttp` native networking to register tokens directly with `POST /api/notifications/register`, avoiding WebView CORS preflight issues.
+  - Proactively resyncs cached tokens from `localStorage` on application startup.
+  - Comprehensive action listener (`pushNotificationActionPerformed`) routing:
+    - `screen: 'favorites'` -> `setActiveTab('favorites')`
+    - `screen: 'boards'` -> `setActiveTab('boards')`
+    - `screen: 'settings'` -> `setActiveTab('settings')`
+    - `screen: 'store' | 'pro' | 'premium'` -> `openStore()`
+    - `screen: 'drop' | action: 'drop'` -> switches to `'home'` tab and immediately triggers `fetchMeme()` to dispense a fresh drop.
+    - `screen: 'home'` -> `setActiveTab('home')`
+  - In-app foreground reception (`pushNotificationReceived`): displays non-intrusive arcade toast alert (`showToast`) and emits window event `meme_capsule_push_received`.
+- **Production Build Artifacts (v3.8 / versionCode 30):** Production Release AAB (`builds/app-release.aab` / `builds/meme-capsule-v3.8.aab`, 7.7MB, v2 signed), Release APK (`builds/app-release.apk` / `builds/meme-capsule-latest.apk` / `builds/meme-capsule-v3.8.apk`, 5.8MB), and Debug APK (`builds/meme-capsule-debug.apk`, 12MB) compiled and verified.
 
 ---
 

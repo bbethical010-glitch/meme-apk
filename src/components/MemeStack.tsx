@@ -27,6 +27,7 @@ interface MemeStackProps {
   favorites?: Meme[];
   onToggleFavorite?: (m: Meme) => void;
   onOpenReport?: (m: Meme) => void;
+  onOpenRedditInfo?: (m: Meme) => void;
   memeReactions?: Record<string, string>;
   onOpenReactionPicker?: () => void;
   onOpenBoardPicker?: () => void;
@@ -107,6 +108,7 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
       favorites = [],
       onToggleFavorite,
       onOpenReport,
+      onOpenRedditInfo,
       memeReactions = {},
       onOpenReactionPicker,
       onOpenBoardPicker,
@@ -409,6 +411,7 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
               onOpenBoardPicker={isActive ? onOpenBoardPicker : undefined}
               isPinnedToBoard={isActive && isPinnedToBoard ? isPinnedToBoard(item) : false}
               onOpenReport={isActive && onOpenReport ? () => onOpenReport(item) : undefined}
+              onOpenRedditInfo={isActive && onOpenRedditInfo ? () => onOpenRedditInfo(item) : undefined}
               onImagePointerDown={isActive ? (e: any) => handlePointerDown(e) : undefined}
               onImagePointerUp={isActive ? (e: any) => handlePointerUp(e) : undefined}
             />

@@ -58,6 +58,7 @@ import './monetization/themes.css';
 import { useAnalytics, ANALYTICS_API_BASE, getDeviceId } from './analytics';
 import OnboardingModal from './OnboardingModal';
 import ReportModal from './ReportModal';
+import RedditInfoModal from './RedditInfoModal';
 import UnpinModal from './UnpinModal';
 import CreateBoardModal from './CreateBoardModal';
 import ShareModal, { buildMemeShareMessage } from './ShareModal';
@@ -166,6 +167,7 @@ const normalizeRedditMeme = (data: RedditMemePayload): Meme => ({
   mediaType: 'image',
   source: 'Reddit',
   likes: data.ups || 0,
+  postLink: data.postLink || (data.subreddit ? `https://reddit.com/r/${data.subreddit}` : undefined),
 });
 
 const fetchJson = async (url: string) => {
@@ -189,8 +191,20 @@ const fetchJson = async (url: string) => {
   return res.json();
 };
 
-const fetchBackendMemePayload = () => fetchJson(RANDOM_MEME_ENDPOINT);
-const fetchRedditMemePayload = () => fetchJson(REDDIT_MEME_ENDPOINT);
+const fetchBackendMemePayload = (excludeIds?: string[]) => {
+  const url = new URL(RANDOM_MEME_ENDPOINT);
+  url.searchParams.set('_ts', String(Date.now()));
+  url.searchParams.set('_nonce', Math.random().toString(36).substring(2, 9));
+  if (excludeIds && excludeIds.length > 0) {
+    url.searchParams.set('exclude', excludeIds.slice(0, 50).join(','));
+  }
+  return fetchJson(url.toString());
+};
+const fetchRedditMemePayload = () => {
+  const url = new URL(REDDIT_MEME_ENDPOINT);
+  url.searchParams.set('_ts', String(Date.now()));
+  return fetchJson(url.toString());
+};
 
 const safeFileName = (title?: string) =>
   `${(title || 'meme-capsule').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'meme-capsule'}.jpg`;
@@ -215,6 +229,9 @@ const STACK_PREFETCH_CONSUMPTION_RATIO = 0.6; // Trigger next stack fetch when 6
 const FIFO_REFILL_TRIGGER_SIZE = Math.ceil(STACK_BATCH_SIZE * (1 - STACK_PREFETCH_CONSUMPTION_RATIO)); // 4 memes remaining
 const ACTIVE_SESSION_STORAGE_KEY = 'meme_capsule_active_session_v1';
 const SHARE_HANDOFF_STORAGE_KEY = 'meme_capsule_share_handoff_v1';
+const SEEN_MEMES_STORAGE_KEY = 'meme_capsule_seen_urls_v2';
+const SEEN_MEME_IDS_STORAGE_KEY = 'meme_capsule_seen_ids_v2';
+const LEGACY_SEEN_MEMES_STORAGE_KEY = 'meme_capsule_seen_urls_v1';
 
 interface ActiveSessionSnapshot {
   meme: Meme | null;
@@ -414,7 +431,7 @@ export default function App() {
 
   // Settings & History Preferences
   const [redditStreamEnabled, setRedditStreamEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('pref_reddit_stream') !== 'false';
+    return localStorage.getItem('pref_reddit_stream') === 'true';
   });
   const [shakeEffectsEnabled, setShakeEffectsEnabled] = useState<boolean>(() => {
     return localStorage.getItem('pref_shake_effects') !== 'false';
@@ -502,21 +519,6 @@ export default function App() {
     };
   }, []);
 
-  // Firebase Cloud Messaging Push Notifications Initialization
-  useEffect(() => {
-    initPushNotifications((data) => {
-      if (data?.screen === 'favorites') {
-        setActiveTab('favorites');
-      } else if (data?.screen === 'boards') {
-        setActiveTab('boards');
-      } else if (data?.screen === 'settings') {
-        setActiveTab('settings');
-      } else if (data?.screen === 'home' || data?.screen === 'drop') {
-        setActiveTab('home');
-      }
-    });
-  }, []);
-
   // Reaction state
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [memeReactions, setMemeReactions] = useState<Record<string, string>>({});
@@ -524,6 +526,8 @@ export default function App() {
   const [showBoardPicker, setShowBoardPicker] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+  const [redditInfoMeme, setRedditInfoMeme] = useState<Meme | null>(null);
+  const [isRedditInfoOpen, setIsRedditInfoOpen] = useState(false);
 
   // Swipe state
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -595,6 +599,72 @@ export default function App() {
     isMultiDropView,
   };
 
+  // --- Persistent Seen-Memes Deduplication (prevents repeats across sessions) ---
+  const seenMemeUrlsInitRef = useRef(false);
+  const seenMemeUrlsRef = useRef<Set<string>>(new Set<string>());
+  const seenMemeIdsRef = useRef<Set<string>>(new Set<string>());
+  const seenMemeIdsListRef = useRef<string[]>([]);
+  const inFlightUrlsRef = useRef<Set<string>>(new Set<string>());
+  const inFlightIdsRef = useRef<Set<string>>(new Set<string>());
+
+  if (!seenMemeUrlsInitRef.current) {
+    try {
+      // 1. Load seen URLs (v2, with fallback to legacy v1)
+      const storedUrls = JSON.parse(
+        localStorage.getItem(SEEN_MEMES_STORAGE_KEY) ||
+        localStorage.getItem(LEGACY_SEEN_MEMES_STORAGE_KEY) ||
+        '[]'
+      );
+      const validStoredUrls = Array.isArray(storedUrls)
+        ? storedUrls.filter((u): u is string => typeof u === 'string')
+        : [];
+      seenMemeUrlsRef.current = new Set<string>(validStoredUrls);
+
+      // 2. Load seen IDs (v2)
+      const storedIds = JSON.parse(
+        localStorage.getItem(SEEN_MEME_IDS_STORAGE_KEY) || '[]'
+      );
+      const validStoredIds = Array.isArray(storedIds)
+        ? storedIds.filter((id): id is string => typeof id === 'string')
+        : [];
+      seenMemeIdsRef.current = new Set<string>(validStoredIds);
+      seenMemeIdsListRef.current = [...validStoredIds];
+    } catch {
+      seenMemeUrlsRef.current = new Set<string>();
+      seenMemeIdsRef.current = new Set<string>();
+      seenMemeIdsListRef.current = [];
+    }
+    seenMemeUrlsInitRef.current = true;
+  }
+
+  const addToSeenMemes = useCallback((url: string, id?: string) => {
+    if (!url) return;
+    seenMemeUrlsRef.current.add(url);
+    if (id && !seenMemeIdsRef.current.has(id)) {
+      seenMemeIdsRef.current.add(id);
+      seenMemeIdsListRef.current.push(id);
+    }
+  }, []);
+
+  const persistSeenMemes = useCallback(() => {
+    try {
+      localStorage.setItem(SEEN_MEMES_STORAGE_KEY, JSON.stringify(Array.from(seenMemeUrlsRef.current)));
+      localStorage.setItem(SEEN_MEME_IDS_STORAGE_KEY, JSON.stringify(Array.from(seenMemeIdsRef.current)));
+    } catch {}
+  }, []);
+
+  // Helper to extract optimal 50-ID exclusion window for Cloudflare D1 query
+  const getExcludeIdsForServer = useCallback((tempExcludedIds: string[] = []): string[] => {
+    const allSeen = seenMemeIdsListRef.current;
+    const combined = new Set<string>(tempExcludedIds);
+
+    // Prioritize the latest seen memes so recent drops are strictly excluded in SQL
+    for (let i = allSeen.length - 1; i >= 0 && combined.size < 50; i--) {
+      combined.add(allSeen[i]);
+    }
+    return Array.from(combined).slice(0, 50);
+  }, []);
+
   const persistActiveSession = useCallback((forExternalShare = false) => {
     const current = sessionStateRef.current;
     if (!current.meme || !current.meme.url) return;
@@ -638,6 +708,8 @@ export default function App() {
 
   useEffect(() => {
     if (meme && meme.url) {
+      addToSeenMemes(meme.url, meme.id);
+      persistSeenMemes();
       persistActiveSession(false);
     }
   }, [
@@ -652,6 +724,8 @@ export default function App() {
     isMultiDropView,
     canvasDimensions,
     persistActiveSession,
+    addToSeenMemes,
+    persistSeenMemes,
   ]);
 
   useEffect(() => {
@@ -711,20 +785,34 @@ export default function App() {
   // Append a single validated meme directly into the live FIFO queue as soon as its preload finishes
   const enqueueMemeToFifo = useCallback((candidate: Meme | null) => {
     if (!candidate || !candidate.url) return;
+    inFlightUrlsRef.current.delete(candidate.url);
+    if (candidate.id) inFlightIdsRef.current.delete(candidate.id);
     setMemeQueue((prev) => {
       const existingUrls = new Set(prev.map((m) => m.url));
+      const existingIds = new Set(prev.map((m) => m.id).filter(Boolean));
       if (sessionStateRef.current.meme?.url) {
         existingUrls.add(sessionStateRef.current.meme.url);
+        if (sessionStateRef.current.meme.id) {
+          existingIds.add(sessionStateRef.current.meme.id);
+        }
       }
-      if (existingUrls.has(candidate.url)) {
+      const isAlreadySeen =
+        existingUrls.has(candidate.url) ||
+        (candidate.id ? existingIds.has(candidate.id) : false) ||
+        seenMemeUrlsRef.current.has(candidate.url) ||
+        (candidate.id ? seenMemeIdsRef.current.has(candidate.id) : false);
+
+      if (isAlreadySeen) {
         return prev;
       }
+      addToSeenMemes(candidate.url, candidate.id);
+      persistSeenMemes();
       const updated = [...prev, candidate].slice(0, PIPELINE_TARGET_SIZE);
       memeQueueRef.current = updated;
       return updated;
     });
     setQueueFetchCounter((prev) => prev + 1);
-  }, []);
+  }, [addToSeenMemes, persistSeenMemes]);
 
   // Rolling FIFO Stack Refill Engine: streams new memes into memeQueue without blocking or dropping refill triggers
   const fillPipeline = useCallback(async (_currentQueueSize?: number, startOffset = 0) => {
@@ -907,6 +995,7 @@ export default function App() {
         !isStoreOpen &&
         !shareTargetMeme &&
         !isReportModalOpen &&
+        !isRedditInfoOpen &&
         !unpinTargetMeme &&
         !isBoardComposerOpen &&
         !rewardBusyRef.current
@@ -928,6 +1017,7 @@ export default function App() {
     isStoreOpen,
     shareTargetMeme,
     isReportModalOpen,
+    isRedditInfoOpen,
     unpinTargetMeme,
     isBoardComposerOpen,
     checkRatingPromptEligibility,
@@ -1220,8 +1310,64 @@ const isValidImageUrl = (url: string): boolean => {
   return true;
 };
 
-const fetchMixedMeme = async (nextViewed: number): Promise<Meme> => {
-  const allowReddit = localStorage.getItem('pref_reddit_stream') !== 'false';
+const CURATED_FALLBACK_MEMES: Meme[] = [
+  {
+    id: 'vault-drop-1',
+    url: 'https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C3VwSYoOSW__2.jpg',
+    title: 'CURATED VAULT DROP',
+    author: 'Meme Capsule Vault',
+    subreddit: 'D1 Vault',
+    rarity: 'Common',
+    mediaType: 'image',
+    source: 'Meme Capsule',
+    likes: 42,
+  },
+  {
+    id: 'vault-drop-2',
+    url: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201080%201080%22%3E%3Crect%20width%3D%221080%22%20height%3D%221080%22%20fill%3D%22%23fff8e7%22%2F%3E%3Crect%20x%3D%22126%22%20y%3D%22180%22%20width%3D%22828%22%20height%3D%22720%22%20rx%3D%2248%22%20fill%3D%22%23ffffff%22%2F%3E%3Crect%20x%3D%22186%22%20y%3D%22238%22%20width%3D%22708%22%20height%3D%2218%22%20rx%3D%229%22%20fill%3D%22%23ffcc4d%22%2F%3E%3Ctext%20x%3D%22540%22%20y%3D%22390%22%20text-anchor%3D%22middle%22%20font-size%3D%2280%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%2316120f%22%3EI%20OPENED%20THE%20APP%3C%2Ftext%3E%3Ctext%20x%3D%22540%22%20y%3D%22524%22%20text-anchor%3D%22middle%22%20font-size%3D%22108%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%2316120f%22%3EFOR%20ONE%20MEME%3C%2Ftext%3E%3Ctext%20x%3D%22540%22%20y%3D%22654%22%20text-anchor%3D%22middle%22%20font-size%3D%2248%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22800%22%20fill%3D%22%2316120f%22%20opacity%3D%220.82%22%3ETHREE%20SHARES%20LATER%3C%2Ftext%3E%3Crect%20x%3D%22372%22%20y%3D%22738%22%20width%3D%22336%22%20height%3D%2284%22%20rx%3D%2242%22%20fill%3D%22%23ffcc4d%22%2F%3E%3Ctext%20x%3D%22540%22%20y%3D%22795%22%20text-anchor%3D%22middle%22%20font-size%3D%2234%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%2316120f%22%3ECURATED%20CHAOS%3C%2Ftext%3E%3C%2Fsvg%3E',
+    title: 'THE LOOP',
+    author: 'Meme Capsule Vault',
+    subreddit: 'Quick Laughs',
+    rarity: 'Common',
+    mediaType: 'image',
+    source: 'Meme Capsule',
+    likes: 64,
+  },
+  {
+    id: 'vault-drop-3',
+    url: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201080%201080%22%3E%3Crect%20width%3D%221080%22%20height%3D%221080%22%20fill%3D%22%23e9f7ff%22%2F%3E%3Crect%20x%3D%22126%22%20y%3D%22180%22%20width%3D%22828%22%20height%3D%22720%22%20rx%3D%2248%22%20fill%3D%22%23f8fdff%22%2F%3E%3Crect%20x%3D%22186%22%20y%3D%22238%22%20width%3D%22708%22%20height%3D%2218%22%20rx%3D%229%22%20fill%3D%22%2342b8dd%22%2F%3E%3Ctext%20x%3D%22540%22%20y%3D%22390%22%20text-anchor%3D%22middle%22%20font-size%3D%2280%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%2310202b%22%3EBRAIN%20AT%202%20AM%3C%2Ftext%3E%3Ctext%20x%3D%22540%22%20y%3D%22524%22%20text-anchor%3D%22middle%22%20font-size%3D%22108%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%2310202b%22%3ENEW%20APP%20IDEA%3C%2Ftext%3E%3Ctext%20x%3D%22540%22%20y%3D%22654%22%20text-anchor%3D%22middle%22%20font-size%3D%2248%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22800%22%20fill%3D%22%2310202b%22%20opacity%3D%220.82%22%3ENO%20BUDGET%2C%20FULL%20CONFIDENCE%3C%2Ftext%3E%3Crect%20x%3D%22372%22%20y%3D%22738%22%20width%3D%22336%22%20height%3D%2284%22%20rx%3D%2242%22%20fill%3D%22%2342b8dd%22%2F%3E%3Ctext%20x%3D%22540%22%20y%3D%22795%22%20text-anchor%3D%22middle%22%20font-size%3D%2234%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%2310202b%22%3EBUILDER%20MOOD%3C%2Ftext%3E%3C%2Fsvg%3E',
+    title: 'BUILDER CONFIDENCE',
+    author: 'Meme Capsule Vault',
+    subreddit: 'Builder Mood',
+    rarity: 'Rare',
+    mediaType: 'image',
+    source: 'Meme Capsule',
+    likes: 91,
+  },
+  {
+    id: 'vault-drop-4',
+    url: 'data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201080%201080%22%3E%3Crect%20width%3D%221080%22%20height%3D%221080%22%20fill%3D%22%23f7f7f7%22%2F%3E%3Crect%20x%3D%22126%22%20y%3D%22180%22%20width%3D%22828%22%20height%3D%22720%22%20rx%3D%2248%22%20fill%3D%22%23ffffff%22%2F%3E%3Crect%20x%3D%22186%22%20y%3D%22238%22%20width%3D%22708%22%20height%3D%2218%22%20rx%3D%229%22%20fill%3D%22%23ff5f5f%22%2F%3E%3Ctext%20x%3D%22540%22%20y%3D%22390%22%20text-anchor%3D%22middle%22%20font-size%3D%2280%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%23151515%22%3ENO%20COMMENTS%20SECTION%3C%2Ftext%3E%3Ctext%20x%3D%22540%22%20y%3D%22524%22%20text-anchor%3D%22middle%22%20font-size%3D%22108%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%23151515%22%3ENO%20DRAMA%3C%2Ftext%3E%3Ctext%20x%3D%22540%22%20y%3D%22654%22%20text-anchor%3D%22middle%22%20font-size%3D%2248%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22800%22%20fill%3D%22%23151515%22%20opacity%3D%220.82%22%3EJUST%20THE%20MEME%3C%2Ftext%3E%3Crect%20x%3D%22372%22%20y%3D%22738%22%20width%3D%22336%22%20height%3D%2284%22%20rx%3D%2242%22%20fill%3D%22%23ff5f5f%22%2F%3E%3Ctext%20x%3D%22540%22%20y%3D%22795%22%20text-anchor%3D%22middle%22%20font-size%3D%2234%22%20font-family%3D%22Arial%2C%20sans-serif%22%20font-weight%3D%22900%22%20fill%3D%22%23151515%22%3EMINIMALISM%3C%2Ftext%3E%3C%2Fsvg%3E',
+    title: 'JUST THE MEME',
+    author: 'Meme Capsule Vault',
+    subreddit: 'Minimalism',
+    rarity: 'Legendary',
+    mediaType: 'image',
+    source: 'Meme Capsule',
+    likes: 105,
+  },
+];
+
+const getCuratedFallbackMeme = (seed: number): Meme => {
+  const index = Math.abs(seed) % CURATED_FALLBACK_MEMES.length;
+  const chosen = CURATED_FALLBACK_MEMES[index];
+  return {
+    ...chosen,
+    id: `${chosen.id}-${seed}`,
+  };
+};
+
+const fetchMixedMeme = async (nextViewed: number, excludeIds?: string[]): Promise<Meme> => {
+  const allowReddit = localStorage.getItem('pref_reddit_stream') === 'true';
   const shouldFetchReddit = allowReddit && nextViewed % 3 === 0;
 
   if (shouldFetchReddit) {
@@ -1238,7 +1384,7 @@ const fetchMixedMeme = async (nextViewed: number): Promise<Meme> => {
   }
 
   try {
-    const json = await fetchBackendMemePayload();
+    const json = await fetchBackendMemePayload(excludeIds);
     if (!json?.meme) throw new Error('Unexpected Meme Capsule payload');
     const memeData: BackendMemePayload = json.meme;
 
@@ -1259,49 +1405,113 @@ const fetchMixedMeme = async (nextViewed: number): Promise<Meme> => {
     }
     return backendMeme;
   } catch (backendError) {
-    console.warn('Backend meme fetch failed, trying Reddit', backendError);
-    const reddit = await fetchRedditMemePayload();
-    const redditMeme = normalizeRedditMeme(reddit);
-    if (!redditMeme.url || reddit.nsfw || reddit.spoiler || !isValidImageUrl(redditMeme.url)) {
-      throw new Error('All meme sources failed');
+    if (allowReddit) {
+      console.warn('Backend meme fetch failed, trying Reddit fallback', backendError);
+      try {
+        const reddit = await fetchRedditMemePayload();
+        const redditMeme = normalizeRedditMeme(reddit);
+        if (redditMeme.url && !reddit.nsfw && !reddit.spoiler && isValidImageUrl(redditMeme.url)) {
+          return redditMeme;
+        }
+      } catch {}
     }
-    return redditMeme;
+    throw backendError;
   }
 };
 
-const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme> => {
+const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme> => {
   let reportedList: string[] = [];
   try {
     reportedList = JSON.parse(localStorage.getItem('reported_memes') || '[]');
   } catch (e) {}
 
+  let candidateFallback: Meme | null = null;
+  const retryExcludedIds: string[] = [];
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const candidate = await fetchMixedMeme(nextViewed + attempt);
-      if (candidate?.url && !reportedList.includes(candidate.url)) {
-        const isLoaded = await preloadImage(candidate.url, 3500);
-        if (isLoaded) {
-          return candidate;
+      // Build dynamic exclusion query: combines recent seen IDs + duplicate candidates encountered during this retry sequence
+      const excludeList = getExcludeIdsForServer(retryExcludedIds);
+      const candidate = await fetchMixedMeme(nextViewed + attempt, excludeList);
+      if (!candidate?.url) continue;
+
+      // 1. Skip reported / blocked memes
+      if (reportedList.includes(candidate.url) || (candidate.id && reportedList.includes(candidate.id))) {
+        if (candidate.id && !retryExcludedIds.includes(candidate.id)) {
+          retryExcludedIds.push(candidate.id);
         }
-        console.warn(`[Attempt ${attempt + 1}/${maxRetries}] Preload failed for ${candidate.url}. Retrying next...`);
+        continue;
       }
+
+      // 2. Skip memes currently in-flight by parallel fetch workers
+      if (inFlightUrlsRef.current.has(candidate.url) || (candidate.id && inFlightIdsRef.current.has(candidate.id))) {
+        continue;
+      }
+
+      // 3. Skip currently displayed meme or memes already in FIFO queue
+      const isCurrentlyDisplayed =
+        sessionStateRef.current.meme?.url === candidate.url ||
+        (candidate.id ? sessionStateRef.current.meme?.id === candidate.id : false);
+      const isAlreadyInQueue = memeQueueRef.current.some(
+        (m) => m.url === candidate.url || (candidate.id ? m.id === candidate.id : false)
+      );
+      if (isCurrentlyDisplayed || isAlreadyInQueue) {
+        if (candidate.id && !retryExcludedIds.includes(candidate.id)) {
+          retryExcludedIds.push(candidate.id);
+        }
+        continue;
+      }
+
+      // 4. Skip persistent seen memes from this or past sessions (by URL or ID)
+      const isAlreadySeen =
+        seenMemeUrlsRef.current.has(candidate.url) ||
+        (candidate.id ? seenMemeIdsRef.current.has(candidate.id) : false);
+
+      if (isAlreadySeen) {
+        if (candidate.id && !retryExcludedIds.includes(candidate.id)) {
+          retryExcludedIds.push(candidate.id);
+        }
+        if (!candidateFallback) {
+          candidateFallback = candidate;
+        }
+        continue;
+      }
+
+      // Unseen candidate passed deduplication filters! Lock in-flight during preload
+      inFlightUrlsRef.current.add(candidate.url);
+      if (candidate.id) inFlightIdsRef.current.add(candidate.id);
+
+      const isLoaded = await preloadImage(candidate.url, 3500);
+      if (isLoaded) {
+        return candidate;
+      }
+
+      // Preload failed/timed out, release from in-flight
+      inFlightUrlsRef.current.delete(candidate.url);
+      if (candidate.id) inFlightIdsRef.current.delete(candidate.id);
+      console.warn(`[Attempt ${attempt + 1}/${maxRetries}] Preload failed for ${candidate.url}. Retrying next...`);
     } catch (err) {
       console.warn(`[Attempt ${attempt + 1}/${maxRetries}] Fetch candidate failed:`, err);
     }
   }
 
+  // If after maxRetries all fetched memes were in the seen set,
+  // the user has consumed 100% of the active curated catalog (~750-800 memes).
+  // Per specification: The user is never stopped, and the capsule is never depleted.
+  // Seamlessly begin a fresh cycle so browsing remains continuous and infinite.
+  if (candidateFallback) {
+    console.log('[Meme Capsule Engine] Catalog 100% consumed. Starting fresh cycle.');
+    seenMemeUrlsRef.current.clear();
+    seenMemeIdsRef.current.clear();
+    seenMemeIdsListRef.current = [];
+    persistSeenMemes();
+    inFlightUrlsRef.current.delete(candidateFallback.url);
+    if (candidateFallback.id) inFlightIdsRef.current.delete(candidateFallback.id);
+    return candidateFallback;
+  }
+
   // Graceful fallback to verified curated vault meme
-  return {
-    id: `vault-drop-${nextViewed}`,
-    url: 'https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C3VwSYoOSW__2.jpg',
-    title: 'CURATED VAULT DROP',
-    author: 'Meme Capsule Vault',
-    subreddit: 'D1 Vault',
-    rarity: 'Common',
-    mediaType: 'image',
-    source: 'Meme Capsule',
-    likes: 42,
-  };
+  return getCuratedFallbackMeme(nextViewed);
 };
 
   const showToast = (text: string, type: 'primary' | 'secondary' | 'tertiary' | 'success' = 'primary') => {
@@ -1405,12 +1615,20 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     setMemeHistory([]);
     setHistoryIndex(-1);
     setMemeQueue([]);
+    seenMemeUrlsRef.current.clear();
+    seenMemeIdsRef.current.clear();
+    seenMemeIdsListRef.current = [];
+    inFlightUrlsRef.current.clear();
+    inFlightIdsRef.current.clear();
     localStorage.removeItem('total_memes_viewed');
     localStorage.removeItem('total_memes_fetched');
     localStorage.removeItem('liked_memes');
     localStorage.removeItem('meme_reactions');
     localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     localStorage.removeItem(SHARE_HANDOFF_STORAGE_KEY);
+    localStorage.removeItem(SEEN_MEMES_STORAGE_KEY);
+    localStorage.removeItem(SEEN_MEME_IDS_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_SEEN_MEMES_STORAGE_KEY);
     sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
     memeDimensionCache.clear();
     setConfirmWipeMode('none');
@@ -1458,6 +1676,11 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     // 3. Clear Blocked Memes & Reset Streak
     setBlockedMemesCount(0);
     setStreak(1);
+    seenMemeUrlsRef.current.clear();
+    seenMemeIdsRef.current.clear();
+    seenMemeIdsListRef.current = [];
+    inFlightUrlsRef.current.clear();
+    inFlightIdsRef.current.clear();
 
     // 4. Remove from localStorage (preserve privacy policy consent & pro purchase status)
     const keysToRemove = [
@@ -1473,6 +1696,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       'streak_last_date',
       ACTIVE_SESSION_STORAGE_KEY,
       SHARE_HANDOFF_STORAGE_KEY,
+      SEEN_MEMES_STORAGE_KEY,
+      SEEN_MEME_IDS_STORAGE_KEY,
+      LEGACY_SEEN_MEMES_STORAGE_KEY,
     ];
     keysToRemove.forEach((k) => localStorage.removeItem(k));
     sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
@@ -1531,6 +1757,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     void fillPipeline(memeQueueRef.current.length, nextViewed + queueFetchCounter);
     try {
       const nextMeme = await fetchValidMeme(nextViewed + 1);
+      inFlightUrlsRef.current.delete(nextMeme.url);
+      if (nextMeme.id) inFlightIdsRef.current.delete(nextMeme.id);
+      addToSeenMemes(nextMeme.url, nextMeme.id);
+      persistSeenMemes();
       setImageFailed(false);
       setMeme(nextMeme);
       setScreen('viewing');
@@ -1544,7 +1774,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     } catch (err) {
       console.warn('Inline meme advance fallback error:', err);
     }
-  }, [totalMemesViewed, totalMemesFetched, queueFetchCounter, fillPipeline, trackEvent]);
+  }, [totalMemesViewed, totalMemesFetched, queueFetchCounter, fillPipeline, trackEvent, addToSeenMemes, persistSeenMemes]);
 
   const swipeToNext = useCallback(() => {
     setShowReactionPicker(false);
@@ -1569,6 +1799,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         setImageFailed(false);
         setMeme(nextMeme);
         setMemeQueue(remainingQueue);
+        addToSeenMemes(nextMeme.url, nextMeme.id);
+        persistSeenMemes();
 
         setTotalMemesViewed(nextViewed);
         setTotalMemesFetched(Math.max(totalMemesFetched, nextViewed));
@@ -1601,6 +1833,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     recordStackConsumptionAndMaybeRefill,
     advanceInlineWithoutLoadingScreen,
     trackEvent,
+    addToSeenMemes,
+    persistSeenMemes,
   ]);
 
   const swipeToPrevious = useCallback(() => {
@@ -1757,6 +1991,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       setImageFailed(false);
       setMeme(nextMeme);
       setMemeQueue(remainingQueue);
+      addToSeenMemes(nextMeme.url, nextMeme.id);
+      persistSeenMemes();
       setScreen('viewing');
 
       const nextViewed = totalMemesViewed + 1;
@@ -1803,6 +2039,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       setLoadProgress(100);
 
       setTimeout(() => {
+        inFlightUrlsRef.current.delete(finalMeme.url);
+        if (finalMeme.id) inFlightIdsRef.current.delete(finalMeme.id);
+        addToSeenMemes(finalMeme.url, finalMeme.id);
+        persistSeenMemes();
         setImageFailed(false);
         setMeme(finalMeme);
         setScreen('viewing');
@@ -1862,6 +2102,40 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       setScreen('error');
     }
   };
+
+  // Firebase Cloud Messaging Push Notifications Initialization & Handling
+  const fetchMemeRef = useRef(fetchMeme);
+  fetchMemeRef.current = fetchMeme;
+  const openStoreRef = useRef(openStore);
+  openStoreRef.current = openStore;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+
+  useEffect(() => {
+    initPushNotifications(
+      (data) => {
+        if (data?.screen === 'favorites') {
+          setActiveTab('favorites');
+        } else if (data?.screen === 'boards') {
+          setActiveTab('boards');
+        } else if (data?.screen === 'settings') {
+          setActiveTab('settings');
+        } else if (data?.screen === 'store' || data?.screen === 'pro' || data?.screen === 'premium') {
+          openStoreRef.current();
+        } else if (data?.screen === 'drop' || data?.action === 'drop') {
+          setActiveTab('home');
+          void fetchMemeRef.current();
+        } else if (data?.screen === 'home') {
+          setActiveTab('home');
+        }
+      },
+      (notification) => {
+        const title = notification.title ? `${notification.title.toUpperCase()}: ` : '';
+        const body = notification.body || 'NEW MEME CAPSULE ALERT!';
+        showToastRef.current(`${title}${body}`, 'secondary');
+      }
+    );
+  }, []);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -2015,6 +2289,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       setImageFailed(false);
       setMeme(nextMeme);
       setMemeQueue(remainingQueue);
+      addToSeenMemes(nextMeme.url, nextMeme.id);
+      persistSeenMemes();
 
       const nextViewed = totalMemesViewed + 1;
       setTotalMemesViewed(nextViewed);
@@ -2044,6 +2320,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
     advanceInlineWithoutLoadingScreen,
     trackEvent,
     toggleFavorite,
+    addToSeenMemes,
+    persistSeenMemes,
   ]);
 
   const requestBoardCreation = () => {
@@ -2314,6 +2592,14 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
       clearInterval(interval);
       setLoadProgress(100);
       setTimeout(() => {
+        [m1, m2, m3].forEach((m) => {
+          if (m?.url) {
+            inFlightUrlsRef.current.delete(m.url);
+            if (m.id) inFlightIdsRef.current.delete(m.id);
+            addToSeenMemes(m.url, m.id);
+          }
+        });
+        persistSeenMemes();
         setMultiDropMemes([m1, m2, m3]);
         setMultiDropIndex(0);
         setIsMultiDropView(true);
@@ -2396,6 +2682,15 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
         meme={reportTargetMeme || meme}
         onSubmitReport={handleSubmitReport}
         isSubmitting={isSubmittingReport}
+      />
+
+      <RedditInfoModal
+        isOpen={isRedditInfoOpen}
+        meme={redditInfoMeme}
+        onClose={() => {
+          setIsRedditInfoOpen(false);
+          setRedditInfoMeme(null);
+        }}
       />
 
       <RatingModal
@@ -2620,6 +2915,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                     onOpenReport={(target) => {
                       setReportTargetMeme(target || meme);
                       setIsReportModalOpen(true);
+                    }}
+                    onOpenRedditInfo={(target) => {
+                      setRedditInfoMeme(target || meme);
+                      setIsRedditInfoOpen(true);
                     }}
                     memeReactions={memeReactions}
                     onOpenReactionPicker={() => {
@@ -3114,7 +3413,22 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                       <div className="h-[140px] bg-background border-[2px] border-outline overflow-hidden flex items-center justify-center relative">
                         <img src={fav.url} alt={fav.title} className="w-full h-full object-cover" />
                       </div>
-                      <span className="font-label-md text-[15px] uppercase truncate font-bold text-on-surface block" title={fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}>{fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}</span>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-label-md text-[15px] uppercase truncate font-bold text-on-surface block" title={fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}>{fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}</span>
+                        {fav.source === 'Reddit' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRedditInfoMeme(fav);
+                              setIsRedditInfoOpen(true);
+                            }}
+                            className="text-[9px] font-bold border border-secondary text-secondary bg-surface-container px-1 py-0.5 active:scale-95 cursor-pointer shrink-0"
+                            title="View Reddit Info"
+                          >
+                            REDDIT
+                          </button>
+                        )}
+                      </div>
                       <div className="flex justify-between items-center gap-xs mt-auto border-t border-outline/30 pt-xs">
                         <span className="font-label-md text-[11px] text-outline uppercase truncate max-w-[100px]">@{fav.author}</span>
                         <div className="flex gap-1.5">
@@ -4049,7 +4363,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 4): Promise<Meme>
                     </a>
 
                     <div className="flex items-center justify-between px-1 text-[10px] font-label-md text-outline uppercase">
-                      <span>MEME CAPSULE v3.8 (BUILD 29)</span>
+                      <span>MEME CAPSULE v3.8 (BUILD 30)</span>
                       <span>ANTI-ALGORITHM ENTERTAINMENT</span>
                     </div>
                   </div>

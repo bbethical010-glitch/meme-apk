@@ -33,7 +33,16 @@ export async function fetchPackMeme(packId: PackId): Promise<Meme> {
     if (typeof data.url !== 'string' || !data.url.startsWith('https://') || data.nsfw || data.spoiler ||
         data.subreddit?.toLowerCase() !== pack.subreddit.toLowerCase() ||
         /\.gifv|v\.redd\.it|\/gallery\//i.test(data.url) || blocked.includes(data.url)) continue;
-    return { url: data.url, title: data.title || pack.name, author: data.author || 'reddit', subreddit: pack.subreddit, source: 'Reddit', mediaType: 'image' };
+    return {
+      url: data.url,
+      title: data.title || pack.name,
+      author: data.author || 'reddit',
+      subreddit: pack.subreddit,
+      source: 'Reddit',
+      mediaType: 'image',
+      likes: data.ups || 0,
+      postLink: data.postLink || `https://reddit.com/r/${pack.subreddit}`,
+    };
   }
   throw new Error('No safe pack meme available');
 }
