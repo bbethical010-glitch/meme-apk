@@ -431,7 +431,7 @@ export default function App() {
 
   // Settings & History Preferences
   const [redditStreamEnabled, setRedditStreamEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('pref_reddit_stream') === 'true';
+    return localStorage.getItem('pref_reddit_stream') !== 'false';
   });
   const [shakeEffectsEnabled, setShakeEffectsEnabled] = useState<boolean>(() => {
     return localStorage.getItem('pref_shake_effects') !== 'false';
@@ -1367,7 +1367,7 @@ const getCuratedFallbackMeme = (seed: number): Meme => {
 };
 
 const fetchMixedMeme = async (nextViewed: number, excludeIds?: string[]): Promise<Meme> => {
-  const allowReddit = localStorage.getItem('pref_reddit_stream') === 'true';
+  const allowReddit = localStorage.getItem('pref_reddit_stream') !== 'false';
   const shouldFetchReddit = allowReddit && nextViewed % 3 === 0;
 
   if (shouldFetchReddit) {
@@ -2255,7 +2255,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
     const updated = exists ? favorites.filter((f) => f.url !== m.url) : [...favorites, { ...m, savedAt: Date.now() }];
     setFavorites(updated);
     localStorage.setItem('meme_favorites', JSON.stringify(updated));
-    showToast(exists ? 'REMOVED FROM VAULT' : `SECURED IN VAULT!${!isPro ? ` (${updated.length}/${FREE_VAULT_LIMIT})` : ''}`, exists ? 'tertiary' : 'success');
+    showToast(exists ? 'REMOVED FROM VAULT' : 'SECURED IN VAULT!', exists ? 'tertiary' : 'success');
   };
 
   const handleCardDismiss = useCallback((decision: DismissDecision, dismissedMeme: Meme) => {

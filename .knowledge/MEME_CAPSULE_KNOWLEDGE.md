@@ -316,8 +316,8 @@ To permanently eliminate meme repetition across the ~700–800 active curated ca
    - `fetchValidMeme()` validates each candidate against: (a) blocked/reported list, (b) active card, (c) live FIFO queue, (d) in-flight parallel fetches, and (e) persistent seen history by both image URL and unique database `id`.
    - Expanded retry budget (up to 35 attempts) guarantees fresh memes even when >80% of the active catalog has been consumed.
    - **Continuous Swiping & Catalog Exhaustion Fallback**: If a user consumes 100% of all active memes in the D1 database, the engine resets the seen history for Cycle 2, ensuring swiping is never blocked and the capsule is never depleted.
-5. **Strict Reddit Auxiliary Stream Isolation (`pref_reddit_stream` default `false`):**
-   - Defaults to 100% curated D1 vault memes. If backend network drops occur, the engine fails gracefully or falls back to curated vector vault cards instead of silently leaking Reddit's static 30-post hot pool when the user has disabled the auxiliary Reddit stream.
+5. **Hybrid Reddit Auxiliary Stream Integration (`pref_reddit_stream` enabled by default):**
+   - Enabled by default (`pref_reddit_stream !== 'false'`), interleaving fresh SFW Reddit drops every 3rd card alongside the curated D1 vault while allowing users to toggle to curated-only mode anytime in Settings.
 6. **Edge Cache-Busting Nonces (`fetchBackendMemePayload`):**
    - Appends timestamps (`_ts`) and cryptographic random nonces (`_nonce`) to bypass Android OkHttp and Cloudflare edge caches.
 
@@ -337,6 +337,7 @@ To keep meme artwork completely clean and unobstructed while preserving full att
      - Source tag (`REDDIT AUXILIARY RELAY`).
      - "OPEN ON REDDIT" direct external link and prominent "CLOSE" CTA.
    - Also integrated directly into the Favorites list so users can inspect Reddit drop intel from their saved vault.
+4. **Streamlined Vault Save Feedback:** Removed the numeric storage count (`(X/100)`) from the toast notification when saving memes to the vault, cleanly presenting `SECURED IN VAULT!`.
 
 ### 3.5 Neo-Brutalist Viral Share Bottom Sheet & Social Dispatch System
 When the user taps Share (from the card overlay, bottom CTA bar, Meme Vault, or Mood Boards), the app opens `ShareModal.tsx`:
