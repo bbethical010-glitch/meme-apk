@@ -540,6 +540,7 @@ export default function App() {
   const stackRef = useRef<MemeStackRef>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const ctaLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLikeLongPressRef = useRef(false);
   const [isLikePressing, setIsLikePressing] = useState(false);
   const likeScaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pinnedMemes, setPinnedMemes] = useState<Meme[]>([]);
@@ -2941,21 +2942,35 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
 
                   {/* Reaction Picker Overlay */}
                   {showReactionPicker && meme && (
-                    <div className="absolute left-1/2 -translate-x-1/2 top-4 z-50 flex items-center gap-1 bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2 py-2 backdrop-blur-md">
-                      {MEME_REACTIONS.map((r) => (
-                        <button
-                          key={r.emoji}
-                          onClick={(e) => { e.stopPropagation(); handleReaction(r.emoji); }}
-                          className={`flex flex-col items-center px-1.5 py-1 transition-all hover:scale-125 active:scale-90 ${
-                            memeReactions[meme.url] === r.emoji ? 'bg-primary-container/50 border-[2px] border-secondary-container' : 'border-[2px] border-transparent'
-                          }`}
-                          title={r.label}
-                        >
-                          <span className="text-[28px] leading-none animate-reaction-pop">{r.emoji}</span>
-                          <span className="font-label-md text-[9px] text-outline uppercase mt-0.5">{r.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      {/* Dismiss backdrop when reaction picker is open */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowReactionPicker(false);
+                        }}
+                      />
+                      <div
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        className="absolute left-1/2 -translate-x-1/2 bottom-4 z-50 flex items-center gap-1 bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2 py-2 backdrop-blur-md max-w-[95%] select-none"
+                      >
+                        {MEME_REACTIONS.map((r) => (
+                          <button
+                            key={r.emoji}
+                            onClick={(e) => { e.stopPropagation(); handleReaction(r.emoji); }}
+                            className={`flex flex-col items-center px-1.5 py-1 transition-all hover:scale-125 active:scale-90 ${
+                              memeReactions[meme.url] === r.emoji ? 'bg-primary-container/50 border-[2px] border-secondary-container' : 'border-[2px] border-transparent'
+                            }`}
+                            title={r.label}
+                          >
+                            <span className="text-[28px] leading-none animate-reaction-pop">{r.emoji}</span>
+                            <span className="font-label-md text-[9px] text-outline uppercase mt-0.5">{r.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
 
                   {/* Board Picker Overlay */}
@@ -3089,8 +3104,34 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                       {/* 1. LIKE */}
                       <button
                         type="button"
+                        onPointerDown={() => {
+                          isLikeLongPressRef.current = false;
+                          if (ctaLongPressTimerRef.current) clearTimeout(ctaLongPressTimerRef.current);
+                          ctaLongPressTimerRef.current = setTimeout(() => {
+                            isLikeLongPressRef.current = true;
+                            setShowMoreMenu(false);
+                            setShowReactionPicker((prev) => !prev);
+                            setShowBoardPicker(false);
+                          }, 450);
+                        }}
+                        onPointerUp={() => {
+                          if (ctaLongPressTimerRef.current) {
+                            clearTimeout(ctaLongPressTimerRef.current);
+                            ctaLongPressTimerRef.current = null;
+                          }
+                        }}
+                        onPointerCancel={() => {
+                          if (ctaLongPressTimerRef.current) {
+                            clearTimeout(ctaLongPressTimerRef.current);
+                            ctaLongPressTimerRef.current = null;
+                          }
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (isLikeLongPressRef.current) {
+                            isLikeLongPressRef.current = false;
+                            return;
+                          }
                           setShowMoreMenu(false);
                           triggerCtaEffect('like', '#FF2A85', e);
                           if (meme) toggleLike(meme);
@@ -3098,7 +3139,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                         onContextMenu={(e) => {
                           e.preventDefault();
                           setShowMoreMenu(false);
-                          setShowReactionPicker(!showReactionPicker);
+                          setShowReactionPicker((prev) => !prev);
                           setShowBoardPicker(false);
                         }}
                         className="mc-cta-btn h-[54px] flex flex-col items-center justify-center gap-1 relative"
