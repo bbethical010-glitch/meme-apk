@@ -10,7 +10,6 @@ import {
   ChevronUp,
   Crown,
   Download,
-  Flame,
   Heart,
   Home,
   Layers,
@@ -4417,7 +4416,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
           style={{ touchAction: 'manipulation' }}
           title="Vault / Favorites"
         >
-          <Flame size={22} strokeWidth={2.5} />
+          <Bookmark size={22} strokeWidth={2.5} />
         </button>
         <button
           type="button"

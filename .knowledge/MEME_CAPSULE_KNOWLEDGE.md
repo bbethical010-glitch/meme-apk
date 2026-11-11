@@ -594,7 +594,10 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
     - `screen: 'drop' | action: 'drop'` -> switches to `'home'` tab and immediately triggers `fetchMeme()` to dispense a fresh drop.
     - `screen: 'home'` -> `setActiveTab('home')`
   - In-app foreground reception (`pushNotificationReceived`): displays non-intrusive arcade toast alert (`showToast`) and emits window event `meme_capsule_push_received`.
-- **Production Build Artifacts (v3.8 / versionCode 30):** Production Release AAB (`builds/app-release.aab` / `builds/meme-capsule-v3.8.aab`, 7.7MB, v2 signed), Release APK (`builds/app-release.apk` / `builds/meme-capsule-latest.apk` / `builds/meme-capsule-v3.8.apk`, 5.8MB), and Debug APK (`builds/meme-capsule-debug.apk`, 12MB) compiled and verified.
+- **Production Build Artifacts (v3.8 / versionCode 30):** Production Release AAB (`builds/app-release.aab` / `builds/meme-capsule-v3.8.aab`, 7.7MB, v2 signed), Release APK (`builds/app-release.apk` / `builds/meme-capsule-latest.apk` / `builds/meme-capsule-v3.8.apk`, 5.8MB), and Debug APK (`builds/meme-capsule-debug.apk`, 12MB) compiled and verified with the updated Vault symbol.
+
+### 3.16 Navigation Dock & CTA Icon Symmetry (`src/App.tsx`)
+- **Vault Symbol Harmonization:** The bottom navigation dock's Vault button symbol was updated from `<Flame size={22} strokeWidth={2.5} />` to `<Bookmark size={22} strokeWidth={2.5} />`, creating 100% visual symmetry with the canvas `SAVED` CTA button bookmark icon while preserving the neo-brutalist outline aesthetic across all 4 dock buttons (`Home`, `Vault / Favorites`, `Moodboards`, `Settings`).
 
 ---
 

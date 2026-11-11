@@ -107,7 +107,7 @@ The Favorites screen keeps the same visual language as the Home screen: thick bo
 The app uses a fixed bottom navigation bar with two icon buttons:
 
 - **Home icon:** Meme discovery.
-- **Flame icon:** Favorites / vault.
+- **Bookmark icon:** Favorites / vault.
 
 Design characteristics:
 
