@@ -7,16 +7,21 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import {
   AlertCircle,
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Crown,
   Download,
   Heart,
   Home,
+  Images,
+  Info,
   Layers,
   LayoutGrid,
   Lock,
   MapPin,
   Plus,
+  Search,
   Share2,
   Smile,
   Trash2,
@@ -379,6 +384,11 @@ export default function App() {
   const [totalMemesFetched, setTotalMemesFetched] = useState(0);
   const [likedMemes, setLikedMemes] = useState<string[]>([]);
   const [searchFavQuery, setSearchFavQuery] = useState('');
+  const [vaultViewCols, setVaultViewCols] = useState<2 | 3 | 4>(3);
+  const [vaultFilter, setVaultFilter] = useState<'all' | 'liked' | 'reddit' | 'curated'>('all');
+  const [vaultLightboxIndex, setVaultLightboxIndex] = useState<number | null>(null);
+  const [vaultSelectMode, setVaultSelectMode] = useState(false);
+  const [vaultSelectedUrls, setVaultSelectedUrls] = useState<Set<string>>(new Set());
   const [toastText, setToastText] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'primary' | 'secondary' | 'tertiary' | 'success'>('primary');
   const [shakeCard, setShakeCard] = useState(false);
@@ -3417,81 +3427,546 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
           </div>
         )}
 
-        {activeTab === 'favorites' && (
-          <section className="w-full max-w-[600px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">
-            <div className="bg-surface-container border-[4px] border-tertiary shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-md flex flex-col gap-md">
-              <div className="border-b-[3px] border-outline pb-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-sm">
-                <h2 className="font-headline-xl text-[38px] text-tertiary tracking-tighter uppercase leading-none skew-x-[-3deg]">MEME VAULT</h2>
-                <input type="text" value={searchFavQuery} onChange={(e) => setSearchFavQuery(e.target.value)} placeholder="SEARCH VAULT..." className="bg-surface-container-low border-[2px] border-outline font-label-md px-3 py-1.5 uppercase focus:outline-none focus:border-tertiary text-[14px]" />
-              </div>
+        {activeTab === 'favorites' && (() => {
+          const q = searchFavQuery.trim().toLowerCase();
+          const filteredFavorites = favorites.filter((fav) => {
+            const matchesSearch =
+              !q ||
+              (fav.title && fav.title.toLowerCase().includes(q)) ||
+              (fav.author && fav.author.toLowerCase().includes(q)) ||
+              (fav.subreddit && fav.subreddit.toLowerCase().includes(q));
 
-              <div className="grid grid-cols-3 gap-xs">
-                <div className="bg-surface-container-low border-[3px] border-outline p-xs text-center">
-                  <span className="block font-label-md text-[11px] text-outline uppercase">Viewed</span>
-                  <span className="block font-headline-xl text-[28px] text-primary uppercase leading-none">{totalMemesViewed}</span>
-                </div>
-                <div className="bg-surface-container-low border-[3px] border-outline p-xs text-center">
-                  <span className="block font-label-md text-[11px] text-outline uppercase">Fetched</span>
-                  <span className="block font-headline-xl text-[28px] text-secondary-container uppercase leading-none">{totalMemesFetched}</span>
-                </div>
-                <div className="bg-surface-container-low border-[3px] border-outline p-xs text-center">
-                  <span className="block font-label-md text-[11px] text-outline uppercase">Liked</span>
-                  <span className="block font-headline-xl text-[28px] text-tertiary uppercase leading-none">{likedMemes.length}</span>
-                </div>
-              </div>
+            if (!matchesSearch) return false;
 
-              {favorites.length === 0 ? (
-                <div className="border-[3px] border-dashed border-outline py-xl text-center flex flex-col items-center justify-center bg-surface-container-low gap-sm">
-                  <Smile size={48} className="text-outline animate-spin" style={{ animationDuration: '4s' }} />
-                  <p className="font-label-xl text-[20px] text-outline uppercase">YOUR VAULT IS SECURELY EMPTY.</p>
-                  <button onClick={() => setActiveTab('home')} className="bg-primary text-on-primary border-[2px] border-background px-4 py-1.5 font-label-xl text-[16px] uppercase shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all mt-xs">GO LOAD MEMES</button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm max-h-[60vh] overflow-y-auto pr-xs">
-                  {favorites.filter((f) => f.title.toLowerCase().includes(searchFavQuery.toLowerCase())).map((fav) => (
-                    <div key={fav.url} className="bg-surface-container-low border-[3px] border-outline p-xs flex flex-col gap-xs relative shadow-[3px_3px_0px_0px_#000]">
-                      <div className="h-[140px] bg-background border-[2px] border-outline overflow-hidden flex items-center justify-center relative">
-                        <img src={fav.url} alt={fav.title} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-label-md text-[15px] uppercase truncate font-bold text-on-surface block" title={fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}>{fav.source === 'Reddit' ? fav.title : 'MEME CAPSULE DROP'}</span>
-                        {fav.source === 'Reddit' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRedditInfoMeme(fav);
-                              setIsRedditInfoOpen(true);
-                            }}
-                            className="text-[9px] font-bold border border-secondary text-secondary bg-surface-container px-1 py-0.5 active:scale-95 cursor-pointer shrink-0"
-                            title="View Reddit Info"
-                          >
-                            REDDIT
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex justify-between items-center gap-xs mt-auto border-t border-outline/30 pt-xs">
-                        <span className="font-label-md text-[11px] text-outline uppercase truncate max-w-[100px]">@{fav.author}</span>
-                        <div className="flex gap-1.5">
-                          <button onClick={() => downloadMeme(fav)} title="Download to gallery" className="bg-primary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><Download size={16} className="text-on-primary" /></button>
-                          <button onClick={() => shareMeme(fav)} className="bg-secondary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><Share2 size={16} className="text-[#000]" /></button>
-                          <button onClick={() => {
-                            handlePin(fav);
-                          }} title="Pin to mood board" className="bg-tertiary p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><LayoutGrid size={16} className="text-on-tertiary" /></button>
-                          <button onClick={() => {
-                            const updated = favorites.filter((f) => f.url !== fav.url);
-                            setFavorites(updated);
-                            localStorage.setItem('meme_favorites', JSON.stringify(updated));
-                            showToast('DELETED FROM VAULT', 'tertiary');
-                          }} className="bg-error-container p-1 border border-background shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center justify-center"><Trash2 size={16} className="text-on-error-container" /></button>
-                        </div>
-                      </div>
+            if (vaultFilter === 'liked') {
+              return likedMemes.includes(fav.url);
+            }
+            if (vaultFilter === 'reddit') {
+              return fav.source === 'Reddit';
+            }
+            if (vaultFilter === 'curated') {
+              return fav.source !== 'Reddit';
+            }
+            return true;
+          });
+
+          const likedInVault = favorites.filter((f) => likedMemes.includes(f.url)).length;
+          const redditInVault = favorites.filter((f) => f.source === 'Reddit').length;
+          const curatedInVault = favorites.filter((f) => f.source !== 'Reddit').length;
+
+          const currentLightboxMeme =
+            vaultLightboxIndex !== null && vaultLightboxIndex >= 0 && vaultLightboxIndex < filteredFavorites.length
+              ? filteredFavorites[vaultLightboxIndex]
+              : null;
+
+          const handleBatchDownload = async () => {
+            if (vaultSelectedUrls.size === 0) return;
+            const selected = favorites.filter((f) => vaultSelectedUrls.has(f.url));
+            showToast(`SAVING ${selected.length} MEMES TO GALLERY...`, 'secondary');
+            for (const m of selected) {
+              await downloadMeme(m);
+            }
+            showToast(`SAVED ${selected.length} MEMES TO GALLERY!`, 'success');
+            setVaultSelectMode(false);
+            setVaultSelectedUrls(new Set());
+          };
+
+          const handleBatchDelete = () => {
+            if (vaultSelectedUrls.size === 0) return;
+            const count = vaultSelectedUrls.size;
+            const updated = favorites.filter((f) => !vaultSelectedUrls.has(f.url));
+            setFavorites(updated);
+            localStorage.setItem('meme_favorites', JSON.stringify(updated));
+            setVaultSelectedUrls(new Set());
+            setVaultSelectMode(false);
+            showToast(`DELETED ${count} MEMES FROM VAULT`, 'tertiary');
+          };
+
+          const handleBatchPin = () => {
+            if (vaultSelectedUrls.size === 0) return;
+            const selected = favorites.filter((f) => vaultSelectedUrls.has(f.url));
+            if (moodBoards.length === 0) {
+              setActiveTab('boards');
+              showToast('CREATE A BOARD FIRST!', 'tertiary');
+              return;
+            }
+            const targetBoard = moodBoards.find((b) => b.id === selectedBoardId) || moodBoards[0];
+            const newUrls = Array.from(new Set([...targetBoard.memeUrls, ...selected.map((s) => s.url)]));
+            const updatedBoards = moodBoards.map((b) =>
+              b.id === targetBoard.id ? { ...b, memeUrls: newUrls } : b
+            );
+            setMoodBoards(updatedBoards);
+            localStorage.setItem('meme_mood_boards', JSON.stringify(updatedBoards));
+            setVaultSelectMode(false);
+            setVaultSelectedUrls(new Set());
+            showToast(`PINNED ${selected.length} MEMES TO ${targetBoard.title}!`, 'success');
+          };
+
+          const handleDeleteCurrentInLightbox = () => {
+            if (!currentLightboxMeme) return;
+            const targetUrl = currentLightboxMeme.url;
+            const updated = favorites.filter((f) => f.url !== targetUrl);
+            setFavorites(updated);
+            localStorage.setItem('meme_favorites', JSON.stringify(updated));
+            showToast('DELETED FROM VAULT', 'tertiary');
+            if (filteredFavorites.length <= 1) {
+              setVaultLightboxIndex(null);
+            } else if (vaultLightboxIndex !== null && vaultLightboxIndex >= filteredFavorites.length - 1) {
+              setVaultLightboxIndex(Math.max(0, filteredFavorites.length - 2));
+            }
+          };
+
+          return (
+            <section className="w-full max-w-[840px] flex flex-col gap-3 animate-in slide-in-from-bottom-6 duration-200 px-1 sm:px-2">
+              <div className="bg-surface-container border-[3px] border-tertiary shadow-[4px_4px_0px_0px_var(--color-primary-container)] p-3 sm:p-4 flex flex-col gap-3">
+                {/* Top Row: Title, Count Badge, Layout / Select controls */}
+                <div className="flex items-center justify-between border-b-[2px] border-outline/30 pb-2.5 gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[20px] leading-none">📁</span>
+                      <h2 className="font-headline-xl text-[28px] sm:text-[34px] text-tertiary tracking-tighter uppercase leading-none skew-x-[-3deg]">
+                        MEME VAULT
+                      </h2>
+                      <span className="font-mono text-[11px] px-2 py-0.5 bg-surface-container-high border border-outline/50 text-secondary-container font-bold">
+                        {favorites.length}{!isPro ? `/${FREE_VAULT_LIMIT}` : ''}
+                      </span>
                     </div>
-                  ))}
+                    <p className="font-label-md text-[10px] sm:text-[11px] text-outline uppercase tracking-wider mt-1">
+                      PHOTO GALLERY • {filteredFavorites.length} {filteredFavorites.length === 1 ? 'MEME' : 'MEMES'} SAVED
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Column Switcher (2, 3, 4) */}
+                    <div className="flex items-center bg-surface-container-low border border-outline/40">
+                      {([2, 3, 4] as const).map((col) => (
+                        <button
+                          key={col}
+                          type="button"
+                          onClick={() => setVaultViewCols(col)}
+                          className={`w-7 h-7 font-mono text-[11px] font-bold flex items-center justify-center transition-all cursor-pointer ${
+                            vaultViewCols === col
+                              ? 'bg-primary text-on-primary'
+                              : 'text-outline hover:text-white'
+                          }`}
+                          title={`${col} Columns Grid`}
+                        >
+                          {col}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Multi-Select Toggle Button */}
+                    {favorites.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVaultSelectMode((prev) => !prev);
+                          setVaultSelectedUrls(new Set());
+                        }}
+                        className={`px-3 py-1 border-[2px] font-label-xl text-[12px] uppercase font-bold transition-all cursor-pointer ${
+                          vaultSelectMode
+                            ? 'bg-secondary-container text-on-secondary-container border-black shadow-[2px_2px_0px_0px_#000]'
+                            : 'bg-surface-container-high text-outline border-outline/40 hover:text-white'
+                        }`}
+                      >
+                        {vaultSelectMode ? 'CANCEL' : 'SELECT'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Search Bar & Category Filter Pills */}
+                {favorites.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {/* Search Bar */}
+                    <div className="relative w-full">
+                      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-outline" />
+                      <input
+                        type="text"
+                        value={searchFavQuery}
+                        onChange={(e) => setSearchFavQuery(e.target.value)}
+                        placeholder="SEARCH SAVED MEMES..."
+                        className="w-full bg-surface-container-low border-[2px] border-outline font-label-md pl-9 pr-8 py-1.5 uppercase focus:outline-none focus:border-tertiary text-[12px] text-white placeholder:text-outline/60"
+                      />
+                      {searchFavQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchFavQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-outline hover:text-white text-[12px] font-bold p-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter Pills */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                      {[
+                        { id: 'all', label: `ALL (${favorites.length})` },
+                        { id: 'liked', label: `❤️ LIKED (${likedInVault})` },
+                        { id: 'reddit', label: `REDDIT (${redditInVault})` },
+                        { id: 'curated', label: `CURATED (${curatedInVault})` },
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setVaultFilter(tab.id as any)}
+                          className={`px-2.5 py-1 border font-label-xl text-[11px] uppercase whitespace-nowrap transition-all cursor-pointer ${
+                            vaultFilter === tab.id
+                              ? 'bg-primary text-on-primary border-black font-bold shadow-[2px_2px_0px_0px_#000]'
+                              : 'bg-surface-container-low text-outline border-outline/30 hover:text-white'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Select Mode Sticky Batch Action Toolbar */}
+                {vaultSelectMode && (
+                  <div className="bg-surface-container-highest border-[2px] border-secondary-container shadow-[3px_3px_0px_0px_#000] p-2 flex flex-wrap items-center justify-between gap-2 animate-in slide-in-from-top-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-[12px] text-secondary-container">
+                        {vaultSelectedUrls.size} OF {filteredFavorites.length} SELECTED
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (vaultSelectedUrls.size === filteredFavorites.length) {
+                            setVaultSelectedUrls(new Set());
+                          } else {
+                            setVaultSelectedUrls(new Set(filteredFavorites.map((f) => f.url)));
+                          }
+                        }}
+                        className="text-[11px] text-outline hover:text-white underline uppercase font-bold cursor-pointer"
+                      >
+                        {vaultSelectedUrls.size === filteredFavorites.length ? 'DESELECT' : 'SELECT ALL'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={vaultSelectedUrls.size === 0}
+                        onClick={handleBatchDownload}
+                        className="bg-primary text-black px-2.5 py-1 border border-black font-bold text-[11px] uppercase flex items-center gap-1 shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-40 cursor-pointer"
+                        title="Download Selected to Gallery"
+                      >
+                        <Download size={13} strokeWidth={2.5} />
+                        <span>SAVE</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={vaultSelectedUrls.size === 0}
+                        onClick={handleBatchPin}
+                        className="bg-secondary text-black px-2.5 py-1 border border-black font-bold text-[11px] uppercase flex items-center gap-1 shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-40 cursor-pointer"
+                        title="Pin Selected to Board"
+                      >
+                        <LayoutGrid size={13} strokeWidth={2.5} />
+                        <span>PIN</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={vaultSelectedUrls.size === 0}
+                        onClick={handleBatchDelete}
+                        className="bg-error-container text-on-error-container px-2.5 py-1 border border-black font-bold text-[11px] uppercase flex items-center gap-1 shadow-[1.5px_1.5px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-40 cursor-pointer"
+                        title="Delete Selected from Vault"
+                      >
+                        <Trash2 size={13} strokeWidth={2.5} />
+                        <span>DELETE</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Empty Album State */}
+                {favorites.length === 0 ? (
+                  <div className="border-[3px] border-dashed border-outline/50 py-12 px-4 text-center flex flex-col items-center justify-center bg-surface-container-low gap-2.5 my-2">
+                    <div className="p-4 bg-surface-container rounded-full border-2 border-outline/40 text-tertiary">
+                      <Images size={42} strokeWidth={2} />
+                    </div>
+                    <p className="font-headline-xl text-[22px] text-white tracking-wide uppercase">YOUR ALBUM IS EMPTY</p>
+                    <p className="font-label-md text-[12px] text-outline max-w-[280px] uppercase leading-relaxed">
+                      Swipe memes in the feed and tap VAULT or swipe up to build your personal camera roll.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('home')}
+                      className="bg-primary text-on-primary border-[2px] border-background px-5 py-2 font-label-xl text-[14px] uppercase font-bold shadow-[3px_3px_0px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all mt-2 cursor-pointer"
+                    >
+                      EXPLORE MEME FEED ▶
+                    </button>
+                  </div>
+                ) : filteredFavorites.length === 0 ? (
+                  <div className="border-[2px] border-dashed border-outline/40 py-10 px-4 text-center flex flex-col items-center justify-center bg-surface-container-low gap-2 my-2">
+                    <Smile size={32} className="text-outline" />
+                    <p className="font-label-xl text-[15px] text-white uppercase">NO MEMES FOUND</p>
+                    <p className="font-label-md text-[11px] text-outline uppercase">Try adjusting your search query or filter pills.</p>
+                    <button
+                      type="button"
+                      onClick={() => { setSearchFavQuery(''); setVaultFilter('all'); }}
+                      className="bg-surface-container-high text-white border border-outline px-3 py-1 font-mono text-[11px] uppercase mt-2 hover:bg-surface-container-highest cursor-pointer"
+                    >
+                      RESET FILTERS
+                    </button>
+                  </div>
+                ) : (
+                  /* Phone Gallery Grid */
+                  <div
+                    className={`grid gap-1 sm:gap-1.5 ${
+                      vaultViewCols === 2 ? 'grid-cols-2' : vaultViewCols === 4 ? 'grid-cols-4' : 'grid-cols-3'
+                    } pb-6`}
+                  >
+                    {filteredFavorites.map((fav, index) => {
+                      const isSelected = vaultSelectedUrls.has(fav.url);
+                      const isLiked = likedMemes.includes(fav.url);
+                      return (
+                        <div
+                          key={fav.url}
+                          onClick={() => {
+                            if (vaultSelectMode) {
+                              setVaultSelectedUrls((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(fav.url)) next.delete(fav.url);
+                                else next.add(fav.url);
+                                return next;
+                              });
+                            } else {
+                              setVaultLightboxIndex(index);
+                            }
+                          }}
+                          className={`aspect-square bg-black border-[2px] overflow-hidden relative group cursor-pointer transition-transform active:scale-[0.97] select-none ${
+                            isSelected
+                              ? 'border-secondary-container ring-2 ring-secondary-container'
+                              : 'border-black/80 hover:border-tertiary'
+                          }`}
+                        >
+                          <img
+                            src={fav.url}
+                            alt={fav.title}
+                            loading="lazy"
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
+
+                          {/* Select Mode Checkmark Badge */}
+                          {vaultSelectMode && (
+                            <div className="absolute top-1.5 right-1.5 z-20">
+                              <div
+                                className={`w-5 h-5 rounded-full border-[2px] flex items-center justify-center transition-all ${
+                                  isSelected
+                                    ? 'bg-secondary-container border-black text-black scale-110'
+                                    : 'bg-black/60 border-white/80 text-transparent'
+                                }`}
+                              >
+                                {isSelected && <Check size={12} strokeWidth={3.5} />}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Non-Select Mode Gallery Badges */}
+                          {!vaultSelectMode && (
+                            <>
+                              {isLiked && (
+                                <div className="absolute top-1 left-1 z-10 bg-black/60 backdrop-blur-sm rounded-full p-1 leading-none shadow">
+                                  <Heart size={10} fill="#FF2A85" color="#FF2A85" />
+                                </div>
+                              )}
+                              {fav.source === 'Reddit' && (
+                                <div className="absolute bottom-1 right-1 z-10 bg-black/80 px-1 py-0.5 border border-secondary text-secondary text-[8px] font-mono font-bold leading-none tracking-tight">
+                                  REDDIT
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Compact Activity Footer Bar */}
+                <div className="border-t border-outline/30 pt-2 flex items-center justify-between text-[11px] font-mono text-outline uppercase">
+                  <span>DROPS SEEN: {totalMemesViewed}</span>
+                  <span>FETCHED: {totalMemesFetched}</span>
+                  <span>TOTAL LIKES: {likedMemes.length}</span>
+                </div>
+              </div>
+
+              {/* Fullscreen Phone Gallery Lightbox / Media Viewer */}
+              {vaultLightboxIndex !== null && currentLightboxMeme && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
+                  onClick={() => setVaultLightboxIndex(null)}
+                >
+                  {/* Lightbox Top Header Bar */}
+                  <div
+                    className="w-full px-3 py-2.5 bg-black/80 border-b border-white/10 flex items-center justify-between z-10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setVaultLightboxIndex(null)}
+                      className="flex items-center gap-1.5 text-white bg-surface-container px-2.5 py-1 border border-white/20 active:scale-95 transition-all cursor-pointer font-bold font-label-xl text-[12px] uppercase"
+                    >
+                      <ChevronLeft size={18} strokeWidth={2.5} />
+                      <span>ALBUM</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[12px] text-white/90 font-bold bg-white/10 px-2 py-0.5 rounded">
+                        {vaultLightboxIndex + 1} / {filteredFavorites.length}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {currentLightboxMeme.source === 'Reddit' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRedditInfoMeme(currentLightboxMeme);
+                            setIsRedditInfoOpen(true);
+                          }}
+                          className="text-[10px] font-bold border border-secondary text-secondary bg-surface-container px-2 py-1 active:scale-95 cursor-pointer flex items-center gap-1 uppercase"
+                        >
+                          <Info size={11} strokeWidth={2.5} />
+                          <span>REDDIT</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setVaultLightboxIndex(null)}
+                        className="w-8 h-8 flex items-center justify-center bg-surface-container border border-white/20 text-white hover:bg-surface-container-high active:scale-90 cursor-pointer"
+                        title="Close viewer"
+                      >
+                        <X size={18} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Lightbox Center Image Viewport */}
+                  <div
+                    className="flex-1 flex flex-col items-center justify-center relative px-2 py-2 overflow-hidden"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Previous Image Chevron */}
+                    {vaultLightboxIndex > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVaultLightboxIndex((i) => Math.max(0, (i ?? 0) - 1));
+                        }}
+                        className="absolute left-2 sm:left-4 z-20 w-10 h-10 rounded-full bg-black/70 border border-white/25 text-white flex items-center justify-center hover:bg-black/90 active:scale-90 transition-all cursor-pointer shadow-lg"
+                        title="Previous photo"
+                      >
+                        <ChevronLeft size={24} strokeWidth={2.5} />
+                      </button>
+                    )}
+
+                    {/* Meme Image */}
+                    <img
+                      src={currentLightboxMeme.url}
+                      alt={currentLightboxMeme.title}
+                      className="max-h-[66vh] max-w-[94vw] w-auto h-auto object-contain border-[2px] border-white/15 shadow-[0px_10px_40px_rgba(0,0,0,0.95)]"
+                    />
+
+                    {/* Next Image Chevron */}
+                    {vaultLightboxIndex < filteredFavorites.length - 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVaultLightboxIndex((i) => Math.min(filteredFavorites.length - 1, (i ?? 0) + 1));
+                        }}
+                        className="absolute right-2 sm:right-4 z-20 w-10 h-10 rounded-full bg-black/70 border border-white/25 text-white flex items-center justify-center hover:bg-black/90 active:scale-90 transition-all cursor-pointer shadow-lg"
+                        title="Next photo"
+                      >
+                        <ChevronRight size={24} strokeWidth={2.5} />
+                      </button>
+                    )}
+
+                    {/* Meme Meta Title & Author */}
+                    <div className="text-center px-4 mt-2.5 max-w-[90vw]">
+                      <h3 className="font-label-xl text-[14px] sm:text-[15px] text-white font-bold truncate uppercase tracking-tight">
+                        {currentLightboxMeme.title || 'MEME CAPSULE DROP'}
+                      </h3>
+                      <p className="font-label-md text-[11px] text-outline mt-0.5 uppercase">
+                        @{currentLightboxMeme.author} {currentLightboxMeme.subreddit ? `• r/${currentLightboxMeme.subreddit}` : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Lightbox Bottom Mobile Gallery Toolbar */}
+                  <div
+                    className="w-full px-4 py-2 bg-black/85 border-t border-white/10 z-10 flex items-center justify-around gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* 1. Like Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => toggleLike(currentLightboxMeme)}
+                      className={`flex flex-col items-center gap-1 p-1 active:scale-90 transition-all cursor-pointer ${
+                        likedMemes.includes(currentLightboxMeme.url) ? 'text-[#FF2A85]' : 'text-outline hover:text-white'
+                      }`}
+                    >
+                      <Heart
+                        size={20}
+                        strokeWidth={2.5}
+                        fill={likedMemes.includes(currentLightboxMeme.url) ? '#FF2A85' : 'none'}
+                      />
+                      <span className="font-mono text-[9px] font-bold uppercase">
+                        {likedMemes.includes(currentLightboxMeme.url) ? 'LIKED' : 'LIKE'}
+                      </span>
+                    </button>
+
+                    {/* 2. Share */}
+                    <button
+                      type="button"
+                      onClick={() => shareMeme(currentLightboxMeme)}
+                      className="flex flex-col items-center gap-1 p-1 text-[#00E5FF] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
+                    >
+                      <Share2 size={20} strokeWidth={2.5} />
+                      <span className="font-mono text-[9px] font-bold uppercase">SHARE</span>
+                    </button>
+
+                    {/* 3. Save / Download to Camera Roll */}
+                    <button
+                      type="button"
+                      onClick={() => downloadMeme(currentLightboxMeme)}
+                      className="flex flex-col items-center gap-1 p-1 text-[#FACC15] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
+                    >
+                      <Download size={20} strokeWidth={2.5} />
+                      <span className="font-mono text-[9px] font-bold uppercase">SAVE</span>
+                    </button>
+
+                    {/* 4. Pin to Board */}
+                    <button
+                      type="button"
+                      onClick={() => handlePin(currentLightboxMeme)}
+                      className="flex flex-col items-center gap-1 p-1 text-[#A855F7] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
+                    >
+                      <LayoutGrid size={20} strokeWidth={2.5} />
+                      <span className="font-mono text-[9px] font-bold uppercase">PIN</span>
+                    </button>
+
+                    {/* 5. Delete from Vault */}
+                    <button
+                      type="button"
+                      onClick={handleDeleteCurrentInLightbox}
+                      className="flex flex-col items-center gap-1 p-1 text-[#FF2A85] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
+                    >
+                      <Trash2 size={20} strokeWidth={2.5} />
+                      <span className="font-mono text-[9px] font-bold uppercase">DELETE</span>
+                    </button>
+                  </div>
                 </div>
               )}
-            </div>
-          </section>
-        )}
+            </section>
+          );
+        })()}
 
         {activeTab === 'boards' && (
           <section className="w-full max-w-[900px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">

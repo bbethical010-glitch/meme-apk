@@ -594,11 +594,19 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
     - `screen: 'drop' | action: 'drop'` -> switches to `'home'` tab and immediately triggers `fetchMeme()` to dispense a fresh drop.
     - `screen: 'home'` -> `setActiveTab('home')`
   - In-app foreground reception (`pushNotificationReceived`): displays non-intrusive arcade toast alert (`showToast`) and emits window event `meme_capsule_push_received`.
-- **Production Build Artifacts (v3.8 / versionCode 30):** Production Release AAB (`builds/app-release.aab` / `builds/meme-capsule-v3.8.aab`, 7.7MB, v2 signed), Release APK (`builds/app-release.apk` / `builds/meme-capsule-latest.apk` / `builds/meme-capsule-v3.8.apk`, 5.8MB), and Debug APK (`builds/meme-capsule-debug.apk`, 12MB) compiled and verified with the updated Vault symbol.
+- **Production Build Artifacts (v3.8 / versionCode 30):** Production Release AAB (`builds/app-release.aab` / `builds/meme-capsule-v3.8.aab`, 7.7MB, v2 signed), Release APK (`builds/app-release.apk` / `builds/meme-capsule-latest.apk` / `builds/meme-capsule-v3.8.apk`, 5.8MB), and Debug APK (`builds/meme-capsule-debug.apk`, 12MB) compiled and verified with Phone Gallery UI for Vault.
 
 ### 3.16 Navigation Dock, CTA Icon Symmetry & Reaction Picker Repositioning (`src/App.tsx`)
 - **Vault Symbol Harmonization:** The bottom navigation dock's Vault button symbol was updated from `<Flame size={22} strokeWidth={2.5} />` to `<Bookmark size={22} strokeWidth={2.5} />`, creating 100% visual symmetry with the canvas `SAVED` CTA button bookmark icon while preserving the neo-brutalist outline aesthetic across all 4 dock buttons (`Home`, `Vault / Favorites`, `Moodboards`, `Settings`).
 - **Reaction Picker Positioning:** Repositioned the reaction picker popup from the top of the canvas (`top-4`) down to just above the 4 CTA buttons (`bottom-4`), featuring a dismiss backdrop and native pointer/long-press detection on the LIKE button without accidental Like state toggling.
+
+### 3.17 Mobile Phone Gallery UI Transformation for Meme Vault (`src/App.tsx`)
+- **Native Phone Album / Gallery Architecture:**
+  - Redesigned the Vault tab from a rigid vertical card list into an authentic mobile photo gallery layout modeled after iOS Photos and Android Google Photos.
+  - **Dynamic Multi-Column Grid:** Square photo tiles (`aspect-square`) with edge-to-edge mobile presentation, customizable column switcher (`[2 | 3 | 4]` columns), and subtle status indicators (liked heart, Reddit tag).
+  - **Fullscreen Media Viewer (Lightbox):** Tapping any photo tile immediately launches an immersive full-screen viewer with next/previous image navigation, image counter (`{index} / {total}`), and a 5-action mobile gallery toolbar (Like toggle, Native Share, MediaStore Gallery Download, Mood Board Pinning, and Vault Deletion with auto-advance).
+  - **Multi-Selection & Batch Actions:** "SELECT" mode allows tapping photo tiles with interactive circular checkboxes, accompanied by a sticky batch action bar for bulk Camera Roll saving, bulk Pinning, and bulk Deletion.
+  - **Album Filter Pills & Live Search:** Instant client-side search with clear action and quick category filter tabs (`ALL`, `❤️ LIKED`, `REDDIT`, `CURATED`).
 
 ---
 
