@@ -223,6 +223,19 @@ const MEME_REACTIONS = [
   { emoji: '🗿', label: 'BRUH' },
   { emoji: '❤️', label: 'LOVE' },
   { emoji: '👑', label: 'KING' },
+  { emoji: '😭', label: 'CRY' },
+  { emoji: '🤡', label: 'CLOWN' },
+  { emoji: '🤯', label: 'MIND BLOWN' },
+  { emoji: '💩', label: 'POOP' },
+  { emoji: '💯', label: '100' },
+  { emoji: '🫡', label: 'SALUTE' },
+];
+
+const PRESET_EMOJIS_GRID = [
+  '👀', '⚡', '💅', '🤌', '🐸', '🫠', '🚀', '🍿',
+  '😈', '🤮', '🥵', '🥶', '🍻', '💣', '🦾', '🦄',
+  '🛸', '👾', '🍕', '🌮', '🌶️', '💎', '🎉', '🏆',
+  '🍔', '🌭', '🍟', '🍩', '🥑', '🎯', '🎲', '🎰',
 ];
 
 const SWIPE_THRESHOLD = 50;
@@ -387,10 +400,15 @@ export default function App() {
   const [vaultViewCols, setVaultViewCols] = useState<2 | 3 | 4>(3);
   const [vaultFilter, setVaultFilter] = useState<'all' | 'liked' | 'reddit' | 'curated'>('all');
   const [vaultLightboxIndex, setVaultLightboxIndex] = useState<number | null>(null);
+  const [lightboxSwipeDelta, setLightboxSwipeDelta] = useState(0);
+  const [isLightboxSwiping, setIsLightboxSwiping] = useState(false);
+  const lightboxTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lightboxSwipeDeltaRef = useRef<number>(0);
   const [vaultSelectMode, setVaultSelectMode] = useState(false);
   const [vaultSelectedUrls, setVaultSelectedUrls] = useState<Set<string>>(new Set());
   const [toastText, setToastText] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'primary' | 'secondary' | 'tertiary' | 'success'>('primary');
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shakeCard, setShakeCard] = useState(false);
   const [memeFeedback, setMemeFeedback] = useState<string | null>(null);
   const [jokeIndex, setJokeIndex] = useState(0);
@@ -532,6 +550,16 @@ export default function App() {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [memeReactions, setMemeReactions] = useState<Record<string, string>>({});
   const [floatingReaction, setFloatingReaction] = useState<string | null>(null);
+  const [customReactions, setCustomReactions] = useState<{ emoji: string; label: string }[]>(() => {
+    try {
+      const saved = localStorage.getItem('meme_capsule_user_custom_reactions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isAddEmojiModalOpen, setIsAddEmojiModalOpen] = useState(false);
+  const [customEmojiInput, setCustomEmojiInput] = useState('');
   const [showBoardPicker, setShowBoardPicker] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
@@ -551,6 +579,7 @@ export default function App() {
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const ctaLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLikeLongPressRef = useRef(false);
+  const likePointerStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const [isLikePressing, setIsLikePressing] = useState(false);
   const likeScaleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pinnedMemes, setPinnedMemes] = useState<Meme[]>([]);
@@ -1100,12 +1129,42 @@ export default function App() {
       }
     }
 
+    // Clean-slate Mood Boards initialization:
+    // Ensure fresh installations or updates start with 0 mood boards so users can create their own custom boards
+    const BOARDS_CLEAN_INIT_KEY = 'meme_capsule_boards_clean_slate_v39';
+    if (!localStorage.getItem(BOARDS_CLEAN_INIT_KEY)) {
+      const existing = localStorage.getItem('meme_mood_boards');
+      if (!existing || existing === '[]') {
+        localStorage.setItem('meme_mood_boards', JSON.stringify([]));
+      } else {
+        try {
+          const parsed = JSON.parse(existing);
+          if (
+            Array.isArray(parsed) &&
+            (parsed.length >= 10 ||
+              parsed.some((b: any) => typeof b?.title === 'string' && b.title.startsWith('CHAOS BOARD')))
+          ) {
+            localStorage.setItem('meme_mood_boards', JSON.stringify([]));
+            localStorage.removeItem('meme_pinboard');
+          }
+        } catch {
+          localStorage.setItem('meme_mood_boards', JSON.stringify([]));
+        }
+      }
+      localStorage.setItem(BOARDS_CLEAN_INIT_KEY, 'true');
+    }
+
     const savedBoards = localStorage.getItem('meme_mood_boards');
     if (savedBoards) {
       try {
         const boards = JSON.parse(savedBoards) as MoodBoard[];
-        setMoodBoards(boards);
-        setSelectedBoardId(boards[0]?.id || null);
+        if (Array.isArray(boards)) {
+          setMoodBoards(boards);
+          setSelectedBoardId(boards[0]?.id || null);
+        } else {
+          setMoodBoards([]);
+          setSelectedBoardId(null);
+        }
 
         // RECOVERY & SYNCHRONIZATION:
         // Ensure every meme URL across all mood boards has a corresponding Meme object in pinnedMemes
@@ -1525,9 +1584,15 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
 };
 
   const showToast = (text: string, type: 'primary' | 'secondary' | 'tertiary' | 'success' = 'primary') => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setToastText(text);
     setToastType(type);
-    setTimeout(() => setToastText(null), 2500);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastText(null);
+      toastTimeoutRef.current = null;
+    }, 1500);
   };
 
   useEffect(() => {
@@ -1746,6 +1811,21 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
     if (meme.id) {
       trackEvent(meme.id, 'reaction');
     }
+  };
+
+  const addCustomReaction = (emoji: string) => {
+    const clean = emoji.trim();
+    if (!clean) return;
+    const all = [...MEME_REACTIONS, ...customReactions];
+    if (!all.some((r) => r.emoji === clean)) {
+      const updated = [...customReactions, { emoji: clean, label: 'CUSTOM' }];
+      setCustomReactions(updated);
+      localStorage.setItem('meme_capsule_user_custom_reactions', JSON.stringify(updated));
+    }
+    handleReaction(clean);
+    setIsAddEmojiModalOpen(false);
+    setShowReactionPicker(false);
+    showToast(`REACTION SET: ${clean}`, 'success');
   };
 
   // --- Swipe Handlers ---
@@ -2443,25 +2523,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
 
   const handlePin = (m: Meme) => {
     if (moodBoards.length === 0) {
-      const firstBoard: MoodBoard = {
-        id: `board-${Date.now()}`,
-        title: 'MAIN VAULT',
-        color: 'secondary',
-        memeUrls: [m.url],
-        createdAt: Date.now(),
-      };
-      const updatedBoards = [firstBoard];
-      setMoodBoards(updatedBoards);
-      setSelectedBoardId(firstBoard.id);
-      localStorage.setItem('meme_mood_boards', JSON.stringify(updatedBoards));
-
-      setPinnedMemes((prev) => {
-        const nextPins = [{ ...m, savedAt: Date.now() }, ...prev.filter((p) => p.url !== m.url)];
-        localStorage.setItem('meme_pinboard', JSON.stringify(nextPins));
-        return nextPins;
-      });
-
-      showToast('PINNED TO MAIN VAULT ✓', 'success');
+      setShowBoardPicker(true);
       return;
     }
 
@@ -2640,11 +2702,14 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
   return (
     <div data-theme={activeTheme} className="app-container dark min-h-screen flex flex-col font-body-md overflow-x-hidden select-none bg-background text-on-background">
       {toastText && (
-        <div role="status" className={`fixed top-24 left-1/2 -translate-x-1/2 z-[1100] px-sm py-2 border-[3px] border-outline shadow-[4px_4px_0px_0px_#000] font-label-md text-xl uppercase ${
-          toastType === 'success' ? 'bg-secondary-container text-on-secondary-container' :
-          toastType === 'secondary' ? 'bg-primary text-on-primary' :
-          toastType === 'tertiary' ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-surface-container text-on-surface'
-        } transition-all animate-bounce`}>
+        <div
+          role="status"
+          className={`pointer-events-none select-none fixed top-20 left-1/2 -translate-x-1/2 z-[1100] px-sm py-2 border-[3px] border-outline shadow-[4px_4px_0px_0px_#000] font-label-md text-lg uppercase ${
+            toastType === 'success' ? 'bg-secondary-container text-on-secondary-container' :
+            toastType === 'secondary' ? 'bg-primary text-on-primary' :
+            toastType === 'tertiary' ? 'bg-tertiary-container text-on-tertiary-container' : 'bg-surface-container text-on-surface'
+          } transition-all animate-bounce`}
+        >
           {toastText}
         </div>
       )}
@@ -2936,105 +3001,310 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                       setShowBoardPicker(false);
                     }}
                     onOpenBoardPicker={() => {
-                      if (moodBoards.length === 0) {
-                        setActiveTab('boards');
-                        showToast('CREATE A BOARD FIRST!', 'tertiary');
-                      } else if (moodBoards.length === 1 && meme) {
-                        toggleMemeOnBoard(moodBoards[0].id, meme);
-                      } else {
-                        setShowBoardPicker(!showBoardPicker);
-                        setShowReactionPicker(false);
-                      }
+                      setShowBoardPicker(true);
+                      setShowReactionPicker(false);
                     }}
                     isPinnedToBoard={(m) => Boolean(selectedBoardId && moodBoards.find((b) => b.id === selectedBoardId)?.memeUrls.includes(m.url))}
                     onLongPress={downloadMeme}
                   />
 
-                  {/* Reaction Picker Overlay */}
-                  {showReactionPicker && meme && (
+                  {/* Reaction Picker Overlay with Smooth Animation & Horizontal Scroll */}
+                  {showReactionPicker && meme && (() => {
+                    const allReactions = [...MEME_REACTIONS, ...customReactions];
+                    return (
+                      <>
+                        {/* Dismiss backdrop when reaction picker is open */}
+                        <div
+                          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs animate-fadeIn"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowReactionPicker(false);
+                          }}
+                        />
+                        <div
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          className="absolute left-1/2 -translate-x-1/2 bottom-4 z-50 flex items-center bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2 py-1.5 backdrop-blur-md max-w-[94%] select-none animate-reaction-dock"
+                        >
+                          <div
+                            className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1 px-1 touch-pan-x"
+                            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                          >
+                            {allReactions.map((r) => (
+                              <button
+                                key={r.emoji}
+                                onClick={(e) => { e.stopPropagation(); handleReaction(r.emoji); }}
+                                className={`shrink-0 flex flex-col items-center px-1.5 py-1 transition-all hover:scale-125 active:scale-90 ${
+                                  memeReactions[meme.url] === r.emoji ? 'bg-primary-container/50 border-[2px] border-secondary-container' : 'border-[2px] border-transparent'
+                                }`}
+                                title={r.label}
+                              >
+                                <span className="text-[26px] leading-none animate-reaction-pop">{r.emoji}</span>
+                                <span className="font-label-md text-[9px] text-outline uppercase mt-0.5">{r.label}</span>
+                              </button>
+                            ))}
+                            {/* WhatsApp-Style (+) Button to Add Custom Emojis */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsAddEmojiModalOpen(true);
+                              }}
+                              className="shrink-0 flex flex-col items-center justify-center w-[42px] h-[44px] bg-surface-container border-2 border-secondary-container hover:bg-secondary-container hover:text-black text-secondary-container active:scale-90 transition-all cursor-pointer shadow-[2px_2px_0_#000]"
+                              title="Add Custom Emoji"
+                            >
+                              <Plus size={18} strokeWidth={3} />
+                              <span className="font-label-md text-[8px] uppercase font-bold mt-0.5">ADD</span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* Add Custom Emoji Modal */}
+                  {isAddEmojiModalOpen && (
                     <>
-                      {/* Dismiss backdrop when reaction picker is open */}
                       <div
-                        className="fixed inset-0 z-40"
+                        className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 animate-fadeIn"
+                        onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
-                          setShowReactionPicker(false);
+                          setIsAddEmojiModalOpen(false);
                         }}
                       />
                       <div
                         onPointerDown={(e) => e.stopPropagation()}
                         onTouchStart={(e) => e.stopPropagation()}
-                        className="absolute left-1/2 -translate-x-1/2 bottom-4 z-50 flex items-center gap-1 bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2 py-2 backdrop-blur-md max-w-[95%] select-none"
+                        className="fixed bottom-0 left-0 right-0 z-50 max-w-[480px] mx-auto bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-primary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] flex flex-col p-4 pb-safe animate-pin-sheet text-on-surface select-none"
                       >
-                        {MEME_REACTIONS.map((r) => (
+                        <div className="flex items-center justify-between pb-3 border-b-2 border-outline/30 mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 bg-primary-container border-2 border-black inline-block" />
+                            <h3 className="font-headline-lg text-[18px] text-white uppercase tracking-wider">
+                              ADD CUSTOM REACTION
+                            </h3>
+                          </div>
                           <button
-                            key={r.emoji}
-                            onClick={(e) => { e.stopPropagation(); handleReaction(r.emoji); }}
-                            className={`flex flex-col items-center px-1.5 py-1 transition-all hover:scale-125 active:scale-90 ${
-                              memeReactions[meme.url] === r.emoji ? 'bg-primary-container/50 border-[2px] border-secondary-container' : 'border-[2px] border-transparent'
-                            }`}
-                            title={r.label}
+                            type="button"
+                            onClick={() => setIsAddEmojiModalOpen(false)}
+                            className="w-7 h-7 flex items-center justify-center bg-surface-container-high text-white border-2 border-black font-bold font-mono text-[14px] shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
                           >
-                            <span className="text-[28px] leading-none animate-reaction-pop">{r.emoji}</span>
-                            <span className="font-label-md text-[9px] text-outline uppercase mt-0.5">{r.label}</span>
+                            ✕
                           </button>
-                        ))}
+                        </div>
+
+                        {/* Input Field for Custom Emoji */}
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            if (customEmojiInput.trim()) {
+                              addCustomReaction(customEmojiInput.trim());
+                              setCustomEmojiInput('');
+                            }
+                          }}
+                          className="flex items-center gap-2 mb-3"
+                        >
+                          <input
+                            type="text"
+                            value={customEmojiInput}
+                            onChange={(e) => setCustomEmojiInput(e.target.value)}
+                            placeholder="Type or paste emoji from keyboard..."
+                            maxLength={8}
+                            className="flex-1 bg-surface-container border-2 border-outline px-3 py-2 text-white font-mono text-[15px] outline-none focus:border-secondary-container"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!customEmojiInput.trim()}
+                            className="px-4 py-2 bg-secondary-container text-black font-label-xl text-[12px] font-bold uppercase border-2 border-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-40 cursor-pointer"
+                          >
+                            ADD
+                          </button>
+                        </form>
+
+                        {/* Preset Grid of Popular Meme Emojis */}
+                        <p className="font-label-md text-[10px] text-outline uppercase tracking-wider mb-2">
+                          QUICK PICK POPULAR EMOJIS:
+                        </p>
+                        <div className="grid grid-cols-8 gap-1.5 overflow-y-auto max-h-[160px] p-1 scrollbar-none overscroll-contain">
+                          {PRESET_EMOJIS_GRID.map((em) => (
+                            <button
+                              key={em}
+                              type="button"
+                              onClick={() => addCustomReaction(em)}
+                              className="w-10 h-10 flex items-center justify-center bg-surface-container border border-outline/30 hover:border-secondary-container hover:bg-surface-container-high text-[22px] active:scale-90 transition-all cursor-pointer"
+                            >
+                              {em}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </>
                   )}
 
-                  {/* Board Picker Overlay */}
-                  {showBoardPicker && moodBoards.length > 0 && meme && (
-                    <div className="absolute left-1/2 -translate-x-1/2 top-4 z-50 flex flex-col gap-1 bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2.5 py-2 backdrop-blur-md min-w-[220px] max-w-[300px]">
-                      <div className="flex items-center justify-between px-1 mb-1 border-b border-outline/30 pb-1">
-                        <span className="font-label-xl text-[11px] text-outline uppercase tracking-wider">PIN TO BOARD</span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowBoardPicker(false);
-                            requestBoardCreation();
-                          }}
-                          className="font-label-md text-[10px] text-secondary-container hover:underline uppercase flex items-center gap-0.5 cursor-pointer"
+                  {/* Board Picker Bottom Sheet (like Share Sheet) */}
+                  {showBoardPicker && meme && (
+                    <>
+                      {/* Dimmed backdrop */}
+                      <div
+                        className="fixed inset-0 bg-black/65 backdrop-blur-sm z-50 animate-fadeIn"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowBoardPicker(false);
+                        }}
+                      />
+
+                      {/* Bottom Sheet Drawer */}
+                      <div
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-secondary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] max-w-[480px] mx-auto animate-pin-sheet pb-safe select-none text-on-surface"
+                        style={{ touchAction: 'pan-y' }}
+                      >
+                        {/* Neo-Brutalist Drag Handle Bar */}
+                        <div
+                          className="w-full flex justify-center pt-2.5 pb-1 cursor-pointer"
+                          onClick={() => setShowBoardPicker(false)}
                         >
-                          <Plus size={11} strokeWidth={3} />
-                          <span>NEW</span>
-                        </button>
+                          <div className="w-14 h-1.5 bg-secondary-container border border-black shadow-[1px_1px_0px_#000]" />
+                        </div>
+
+                        {/* Sheet Header Bar */}
+                        <div className="flex items-center justify-between px-4 py-2 border-b-2 border-outline/30">
+                          <div className="flex items-center gap-2">
+                            <span className="w-3 h-3 bg-secondary-container border-2 border-black inline-block shrink-0" />
+                            <h2 className="font-headline-lg text-[18px] text-white uppercase tracking-wider leading-none">
+                              PIN TO MOOD BOARD
+                            </h2>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowBoardPicker(false);
+                                requestBoardCreation();
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-secondary-container text-black font-label-xl text-[11px] font-bold uppercase border-2 border-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                            >
+                              <Plus size={13} strokeWidth={3} />
+                              <span>NEW BOARD</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowBoardPicker(false)}
+                              className="w-7 h-7 flex items-center justify-center bg-surface-container-high text-white border-2 border-black font-bold font-mono text-[14px] shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                              aria-label="Close"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Compact Meme Preview Row */}
+                        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-container-low border-b-2 border-outline/20">
+                          <div className="w-10 h-10 bg-primary-container border-2 border-black shrink-0 overflow-hidden shadow-[2px_2px_0px_#000]">
+                            <img src={meme.url} alt="" className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-label-xl text-[12px] text-white uppercase truncate font-bold">
+                              {meme.source === 'Reddit' && meme.title ? meme.title : 'MEME CAPSULE DROP'}
+                            </p>
+                            <span className="font-mono text-[10px] text-secondary-container block">
+                              {moodBoards.length === 0
+                                ? 'NO BOARDS YET — CREATE ONE BELOW'
+                                : 'TAP A BOARD TO PIN OR UNPIN'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Optimised Scrollable Boards List */}
+                        <div
+                          className="flex flex-col gap-2 p-3 overflow-y-auto max-h-[48vh] scrollbar-none overscroll-contain"
+                          style={{
+                            WebkitOverflowScrolling: 'touch',
+                            touchAction: 'pan-y',
+                          }}
+                        >
+                          {moodBoards.length === 0 ? (
+                            <div className="py-6 px-4 text-center flex flex-col items-center gap-2">
+                              <LayoutGrid size={36} className="text-secondary-container mb-1" />
+                              <p className="font-headline-lg text-[16px] text-white uppercase">
+                                NO MOOD BOARDS YET
+                              </p>
+                              <p className="font-label-md text-[11px] text-outline uppercase max-w-[260px]">
+                                Create custom themed boards to organize and save your best meme drops.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowBoardPicker(false);
+                                  requestBoardCreation();
+                                }}
+                                className="mt-2 px-4 py-2 bg-secondary-container text-black font-label-xl text-[13px] font-bold uppercase border-2 border-black shadow-[3px_3px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Plus size={15} strokeWidth={3} />
+                                <span>CREATE FIRST BOARD</span>
+                              </button>
+                            </div>
+                          ) : (
+                            moodBoards.map((board) => {
+                              const isPinned = board.memeUrls.includes(meme.url);
+                              const hex = getBoardHex(board.color);
+                              return (
+                                <button
+                                  key={board.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleMemeOnBoard(board.id, meme);
+                                    setSelectedBoardId(board.id);
+                                    setShowBoardPicker(false);
+                                  }}
+                                  className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 border-[2px] transition-all text-left cursor-pointer shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 ${
+                                    isPinned
+                                      ? 'bg-primary-container/40 border-secondary-container text-white'
+                                      : 'bg-surface-container border-outline/40 hover:bg-surface-container-high text-on-surface'
+                                  }`}
+                                  style={{
+                                    borderLeftColor: hex,
+                                    borderLeftWidth: '5px',
+                                    touchAction: 'manipulation',
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2.5 truncate">
+                                    <span
+                                      className="w-3 h-3 shrink-0 border border-black"
+                                      style={{ backgroundColor: hex }}
+                                    />
+                                    <span className="font-label-xl text-[14px] uppercase truncate font-bold">
+                                      {board.title}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="font-label-md text-[11px] text-outline">
+                                      ({board.memeUrls.length} {board.memeUrls.length === 1 ? 'meme' : 'memes'})
+                                    </span>
+                                    {isPinned ? (
+                                      <span className="px-2 py-0.5 bg-secondary-container text-black font-label-xl text-[10px] font-bold uppercase border border-black shadow-[1px_1px_0px_#000] flex items-center gap-0.5">
+                                        ✓ PINNED
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 bg-surface-container-high text-outline font-label-xl text-[10px] uppercase border border-outline/40">
+                                        + PIN
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
                       </div>
-                      {moodBoards.map((board) => {
-                        const isPinned = board.memeUrls.includes(meme.url);
-                        return (
-                          <button
-                            key={board.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleMemeOnBoard(board.id, meme);
-                              setSelectedBoardId(board.id);
-                              setShowBoardPicker(false);
-                            }}
-                            className={`flex items-center justify-between gap-2 px-2.5 py-2 transition-all text-left cursor-pointer ${
-                              isPinned
-                                ? 'bg-primary-container/60 border-[2px] border-secondary-container text-on-surface'
-                                : 'border-[2px] border-transparent hover:bg-surface-container-low text-on-surface'
-                            }`}
-                            style={{ touchAction: 'manipulation' }}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <span
-                                className="w-2.5 h-2.5 shrink-0 border border-black/40"
-                                style={{ backgroundColor: getBoardHex(board.color) }}
-                              />
-                              <span className="font-label-xl text-[13px] uppercase truncate font-bold">{board.title}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="font-label-md text-[10px] text-outline">({board.memeUrls.length})</span>
-                              {isPinned && <span className="text-[14px] text-secondary-container font-bold leading-none">✓</span>}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    </>
                   )}
 
                   {/* Off-screen Image Preloader for the 4 visible cards */}
@@ -3103,7 +3373,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                       {/* Dismiss backdrop when #moreMenu popover is open */}
                       {showMoreMenu && (
                         <div
-                          className="fixed inset-0 z-40"
+                          className="fixed inset-0 z-40 bg-black/20 animate-fadeIn"
                           onClick={(e) => {
                             e.stopPropagation();
                             setShowMoreMenu(false);
@@ -3114,20 +3384,49 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                       {/* 1. LIKE */}
                       <button
                         type="button"
-                        onPointerDown={() => {
+                        onPointerDown={(e) => {
+                          if (e.button !== undefined && e.button !== 0) return;
                           isLikeLongPressRef.current = false;
-                          if (ctaLongPressTimerRef.current) clearTimeout(ctaLongPressTimerRef.current);
+                          if (ctaLongPressTimerRef.current) {
+                            clearTimeout(ctaLongPressTimerRef.current);
+                            ctaLongPressTimerRef.current = null;
+                          }
+                          likePointerStartPosRef.current = { x: e.clientX, y: e.clientY };
                           ctaLongPressTimerRef.current = setTimeout(() => {
                             isLikeLongPressRef.current = true;
                             setShowMoreMenu(false);
-                            setShowReactionPicker((prev) => !prev);
                             setShowBoardPicker(false);
+                            setShowReactionPicker(true);
+                            if (window.navigator?.vibrate) {
+                              try {
+                                window.navigator.vibrate(15);
+                              } catch (_) {}
+                            }
                           }, 450);
+                        }}
+                        onPointerMove={(e) => {
+                          if (!likePointerStartPosRef.current || !ctaLongPressTimerRef.current) return;
+                          const dist = Math.hypot(
+                            e.clientX - likePointerStartPosRef.current.x,
+                            e.clientY - likePointerStartPosRef.current.y
+                          );
+                          if (dist > 10) {
+                            if (ctaLongPressTimerRef.current) {
+                              clearTimeout(ctaLongPressTimerRef.current);
+                              ctaLongPressTimerRef.current = null;
+                            }
+                          }
                         }}
                         onPointerUp={() => {
                           if (ctaLongPressTimerRef.current) {
                             clearTimeout(ctaLongPressTimerRef.current);
                             ctaLongPressTimerRef.current = null;
+                          }
+                          likePointerStartPosRef.current = null;
+                          if (isLikeLongPressRef.current) {
+                            setTimeout(() => {
+                              isLikeLongPressRef.current = false;
+                            }, 250);
                           }
                         }}
                         onPointerCancel={() => {
@@ -3135,11 +3434,32 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                             clearTimeout(ctaLongPressTimerRef.current);
                             ctaLongPressTimerRef.current = null;
                           }
+                          likePointerStartPosRef.current = null;
+                          if (isLikeLongPressRef.current) {
+                            setTimeout(() => {
+                              isLikeLongPressRef.current = false;
+                            }, 250);
+                          }
+                        }}
+                        onPointerLeave={() => {
+                          if (ctaLongPressTimerRef.current) {
+                            clearTimeout(ctaLongPressTimerRef.current);
+                            ctaLongPressTimerRef.current = null;
+                          }
+                          likePointerStartPosRef.current = null;
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          if (ctaLongPressTimerRef.current) {
+                            clearTimeout(ctaLongPressTimerRef.current);
+                            ctaLongPressTimerRef.current = null;
+                          }
                           if (isLikeLongPressRef.current) {
                             isLikeLongPressRef.current = false;
+                            return;
+                          }
+                          if (showReactionPicker) {
+                            setShowReactionPicker(false);
                             return;
                           }
                           setShowMoreMenu(false);
@@ -3148,9 +3468,17 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                         }}
                         onContextMenu={(e) => {
                           e.preventDefault();
+                          if (ctaLongPressTimerRef.current) {
+                            clearTimeout(ctaLongPressTimerRef.current);
+                            ctaLongPressTimerRef.current = null;
+                          }
                           setShowMoreMenu(false);
-                          setShowReactionPicker((prev) => !prev);
                           setShowBoardPicker(false);
+                          setShowReactionPicker(true);
+                          isLikeLongPressRef.current = true;
+                          setTimeout(() => {
+                            isLikeLongPressRef.current = false;
+                          }, 250);
                         }}
                         className="mc-cta-btn h-[54px] flex flex-col items-center justify-center gap-1 relative"
                         style={{
@@ -3189,6 +3517,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                         onClick={(e) => {
                           e.stopPropagation();
                           setShowMoreMenu(false);
+                          setShowReactionPicker(false);
+                          setShowBoardPicker(false);
                           triggerCtaEffect('vault', '#A855F7', e);
                           if (meme) toggleFavorite(meme);
                         }}
@@ -3229,19 +3559,15 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                         onClick={(e) => {
                           e.stopPropagation();
                           setShowMoreMenu(false);
+                          setShowReactionPicker(false);
                           triggerCtaEffect('pin', '#FACC15', e);
-                          if (moodBoards.length > 1) {
-                            setShowBoardPicker(!showBoardPicker);
-                            setShowReactionPicker(false);
-                          } else if (meme) {
-                            togglePin(meme);
-                          }
+                          setShowBoardPicker(true);
                         }}
                         onContextMenu={(e) => {
                           e.preventDefault();
                           setShowMoreMenu(false);
-                          setShowBoardPicker(!showBoardPicker);
                           setShowReactionPicker(false);
+                          setShowBoardPicker(true);
                         }}
                         className="mc-cta-btn h-[54px] flex flex-col items-center justify-center gap-1 relative"
                         style={{
@@ -3317,12 +3643,12 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                           </span>
                         </button>
 
-                        {/* Secondary Popover Menu (#moreMenu) */}
+                        {/* Secondary Popover Menu (#moreMenu) with Smooth Entrance Animation */}
                         {showMoreMenu && (
                           <div
                             id="moreMenu"
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 bottom-full mb-3 w-48 bg-white border-4 border-black shadow-[4px_4px_0px_#000000] z-50 flex flex-col divide-y-4 divide-black"
+                            className="absolute right-0 bottom-full mb-3 w-48 bg-white border-4 border-black shadow-[4px_4px_0px_#000000] z-50 flex flex-col divide-y-4 divide-black animate-more-menu select-none"
                           >
                             {/* 1. SHARE (#A855F7) */}
                             <button
@@ -3514,6 +3840,48 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
             } else if (vaultLightboxIndex !== null && vaultLightboxIndex >= filteredFavorites.length - 1) {
               setVaultLightboxIndex(Math.max(0, filteredFavorites.length - 2));
             }
+          };
+
+          const handleLightboxTouchStart = (e: React.TouchEvent | React.PointerEvent) => {
+            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.PointerEvent).clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.PointerEvent).clientY;
+            lightboxTouchStartRef.current = { x: clientX, y: clientY };
+            lightboxSwipeDeltaRef.current = 0;
+            setIsLightboxSwiping(true);
+          };
+
+          const handleLightboxTouchMove = (e: React.TouchEvent | React.PointerEvent) => {
+            if (!lightboxTouchStartRef.current) return;
+            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.PointerEvent).clientX;
+            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.PointerEvent).clientY;
+            const dx = clientX - lightboxTouchStartRef.current.x;
+            const dy = clientY - lightboxTouchStartRef.current.y;
+            if (Math.abs(dx) > Math.abs(dy)) {
+              let dampedDx = dx;
+              if (
+                (vaultLightboxIndex === 0 && dx > 0) ||
+                (vaultLightboxIndex === filteredFavorites.length - 1 && dx < 0)
+              ) {
+                dampedDx = dx * 0.3;
+              }
+              lightboxSwipeDeltaRef.current = dampedDx;
+              setLightboxSwipeDelta(dampedDx);
+            }
+          };
+
+          const handleLightboxTouchEnd = () => {
+            if (!lightboxTouchStartRef.current) return;
+            const dx = lightboxSwipeDeltaRef.current;
+            const SWIPE_THRESHOLD = 36;
+            if (dx < -SWIPE_THRESHOLD) {
+              setVaultLightboxIndex((i) => (i !== null ? Math.min(filteredFavorites.length - 1, i + 1) : null));
+            } else if (dx > SWIPE_THRESHOLD) {
+              setVaultLightboxIndex((i) => (i !== null ? Math.max(0, i - 1) : null));
+            }
+            lightboxTouchStartRef.current = null;
+            lightboxSwipeDeltaRef.current = 0;
+            setLightboxSwipeDelta(0);
+            setIsLightboxSwiping(false);
           };
 
           return (
@@ -3798,30 +4166,34 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
               {/* Fullscreen Phone Gallery Lightbox / Media Viewer */}
               {vaultLightboxIndex !== null && currentLightboxMeme && (
                 <div
-                  className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
+                  className="fixed inset-0 z-50 bg-[#07060a]/98 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
                   onClick={() => setVaultLightboxIndex(null)}
                 >
-                  {/* Lightbox Top Header Bar */}
+                  {/* Lightbox Top Header Bar - Optimized for Notification / Status Bar Safe-Area */}
                   <div
-                    className="w-full px-3 py-2.5 bg-black/80 border-b border-white/10 flex items-center justify-between z-10"
+                    className="w-full px-4 py-3 bg-[#0d0c14]/95 border-b-[2px] border-white/20 flex items-center justify-between z-20 shadow-md"
+                    style={{
+                      paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       type="button"
                       onClick={() => setVaultLightboxIndex(null)}
-                      className="flex items-center gap-1.5 text-white bg-surface-container px-2.5 py-1 border border-white/20 active:scale-95 transition-all cursor-pointer font-bold font-label-xl text-[12px] uppercase"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f1b2e] hover:bg-[#2d2644] text-[#E0E2EC] border-[2px] border-[#6750A4] shadow-[2px_2px_0px_#000] active:scale-95 transition-all cursor-pointer font-bold font-mono text-[12px] uppercase"
+                      title="Back to Vault Album"
                     >
-                      <ChevronLeft size={18} strokeWidth={2.5} />
+                      <ChevronLeft size={16} strokeWidth={3} />
                       <span>ALBUM</span>
                     </button>
 
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-white/90 font-bold bg-white/10 px-2 py-0.5 rounded">
+                      <span className="font-mono text-[12px] text-[#A855F7] font-bold bg-[#141218] border border-[#A855F7]/50 px-2.5 py-1 shadow-[2px_2px_0px_#000]">
                         {vaultLightboxIndex + 1} / {filteredFavorites.length}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       {currentLightboxMeme.source === 'Reddit' && (
                         <button
                           type="button"
@@ -3829,67 +4201,54 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                             setRedditInfoMeme(currentLightboxMeme);
                             setIsRedditInfoOpen(true);
                           }}
-                          className="text-[10px] font-bold border border-secondary text-secondary bg-surface-container px-2 py-1 active:scale-95 cursor-pointer flex items-center gap-1 uppercase"
+                          className="text-[11px] font-bold border-[2px] border-secondary text-secondary bg-[#1a1824] px-2.5 py-1 active:scale-95 cursor-pointer flex items-center gap-1 uppercase font-mono shadow-[2px_2px_0px_#000]"
                         >
-                          <Info size={11} strokeWidth={2.5} />
+                          <Info size={13} strokeWidth={2.5} />
                           <span>REDDIT</span>
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() => setVaultLightboxIndex(null)}
-                        className="w-8 h-8 flex items-center justify-center bg-surface-container border border-white/20 text-white hover:bg-surface-container-high active:scale-90 cursor-pointer"
-                        title="Close viewer"
+                        className="w-9 h-9 flex items-center justify-center bg-[#FF2A85] text-white border-[2px] border-black shadow-[2px_2px_0px_#000] hover:bg-[#FF0066] active:scale-90 transition-all cursor-pointer font-black"
+                        title="Close gallery viewer"
                       >
-                        <X size={18} strokeWidth={2.5} />
+                        <X size={20} strokeWidth={3} />
                       </button>
                     </div>
                   </div>
 
-                  {/* Lightbox Center Image Viewport */}
+                  {/* Lightbox Center Image Viewport with Touch/Pointer Horizontal Swipe */}
                   <div
-                    className="flex-1 flex flex-col items-center justify-center relative px-2 py-2 overflow-hidden"
+                    className="flex-1 flex flex-col items-center justify-center relative px-3 py-2 overflow-hidden touch-pan-y"
                     onClick={(e) => e.stopPropagation()}
+                    onTouchStart={handleLightboxTouchStart}
+                    onTouchMove={handleLightboxTouchMove}
+                    onTouchEnd={handleLightboxTouchEnd}
+                    onTouchCancel={handleLightboxTouchEnd}
+                    onPointerDown={handleLightboxTouchStart}
+                    onPointerMove={handleLightboxTouchMove}
+                    onPointerUp={handleLightboxTouchEnd}
+                    onPointerCancel={handleLightboxTouchEnd}
                   >
-                    {/* Previous Image Chevron */}
-                    {vaultLightboxIndex > 0 && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVaultLightboxIndex((i) => Math.max(0, (i ?? 0) - 1));
-                        }}
-                        className="absolute left-2 sm:left-4 z-20 w-10 h-10 rounded-full bg-black/70 border border-white/25 text-white flex items-center justify-center hover:bg-black/90 active:scale-90 transition-all cursor-pointer shadow-lg"
-                        title="Previous photo"
-                      >
-                        <ChevronLeft size={24} strokeWidth={2.5} />
-                      </button>
-                    )}
-
-                    {/* Meme Image */}
-                    <img
-                      src={currentLightboxMeme.url}
-                      alt={currentLightboxMeme.title}
-                      className="max-h-[66vh] max-w-[94vw] w-auto h-auto object-contain border-[2px] border-white/15 shadow-[0px_10px_40px_rgba(0,0,0,0.95)]"
-                    />
-
-                    {/* Next Image Chevron */}
-                    {vaultLightboxIndex < filteredFavorites.length - 1 && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVaultLightboxIndex((i) => Math.min(filteredFavorites.length - 1, (i ?? 0) + 1));
-                        }}
-                        className="absolute right-2 sm:right-4 z-20 w-10 h-10 rounded-full bg-black/70 border border-white/25 text-white flex items-center justify-center hover:bg-black/90 active:scale-90 transition-all cursor-pointer shadow-lg"
-                        title="Next photo"
-                      >
-                        <ChevronRight size={24} strokeWidth={2.5} />
-                      </button>
-                    )}
+                    {/* Meme Canvas Container with Horizontal Swipe Transform and Arcade Border */}
+                    <div
+                      className="relative flex items-center justify-center transition-transform"
+                      style={{
+                        transform: `translateX(${lightboxSwipeDelta}px)`,
+                        transition: isLightboxSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)',
+                      }}
+                    >
+                      <img
+                        src={currentLightboxMeme.url}
+                        alt={currentLightboxMeme.title}
+                        className="max-h-[56vh] max-w-[92vw] w-auto h-auto object-contain border-[3px] border-secondary-container shadow-[6px_6px_0px_#000000] bg-black select-none pointer-events-none"
+                        draggable={false}
+                      />
+                    </div>
 
                     {/* Meme Meta Title & Author */}
-                    <div className="text-center px-4 mt-2.5 max-w-[90vw]">
+                    <div className="text-center px-4 mt-3 max-w-[90vw]">
                       <h3 className="font-label-xl text-[14px] sm:text-[15px] text-white font-bold truncate uppercase tracking-tight">
                         {currentLightboxMeme.title || 'MEME CAPSULE DROP'}
                       </h3>
@@ -3899,68 +4258,80 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                     </div>
                   </div>
 
-                  {/* Lightbox Bottom Mobile Gallery Toolbar */}
+                  {/* Lightbox Bottom Mobile Gallery Toolbar with SAVE, SHARE, and REMOVE CTAs */}
                   <div
-                    className="w-full px-4 py-2 bg-black/85 border-t border-white/10 z-10 flex items-center justify-around gap-2"
+                    className="w-full px-4 pt-3 pb-4 bg-[#0d0c14]/95 border-t-[2px] border-white/20 z-20 flex flex-col gap-2.5 shadow-2xl"
+                    style={{
+                      paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+                    }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* 1. Like Toggle */}
-                    <button
-                      type="button"
-                      onClick={() => toggleLike(currentLightboxMeme)}
-                      className={`flex flex-col items-center gap-1 p-1 active:scale-90 transition-all cursor-pointer ${
-                        likedMemes.includes(currentLightboxMeme.url) ? 'text-[#FF2A85]' : 'text-outline hover:text-white'
-                      }`}
-                    >
-                      <Heart
-                        size={20}
-                        strokeWidth={2.5}
-                        fill={likedMemes.includes(currentLightboxMeme.url) ? '#FF2A85' : 'none'}
-                      />
-                      <span className="font-mono text-[9px] font-bold uppercase">
-                        {likedMemes.includes(currentLightboxMeme.url) ? 'LIKED' : 'LIKE'}
-                      </span>
-                    </button>
+                    {/* Primary 3 CTAs: SAVE, SHARE, REMOVE */}
+                    <div className="grid grid-cols-3 gap-2.5 w-full">
+                      {/* 1. SAVE */}
+                      <button
+                        type="button"
+                        onClick={() => downloadMeme(currentLightboxMeme)}
+                        className="flex items-center justify-center gap-1.5 py-3 px-2 bg-[#FACC15] hover:bg-[#ffe043] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[13px] uppercase tracking-wide"
+                        title="Save / Download Meme"
+                      >
+                        <Download size={18} strokeWidth={2.5} />
+                        <span>SAVE</span>
+                      </button>
 
-                    {/* 2. Share */}
-                    <button
-                      type="button"
-                      onClick={() => shareMeme(currentLightboxMeme)}
-                      className="flex flex-col items-center gap-1 p-1 text-[#00E5FF] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
-                    >
-                      <Share2 size={20} strokeWidth={2.5} />
-                      <span className="font-mono text-[9px] font-bold uppercase">SHARE</span>
-                    </button>
+                      {/* 2. SHARE */}
+                      <button
+                        type="button"
+                        onClick={() => shareMeme(currentLightboxMeme)}
+                        className="flex items-center justify-center gap-1.5 py-3 px-2 bg-[#00E5FF] hover:bg-[#60f1ff] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[13px] uppercase tracking-wide"
+                        title="Share Meme"
+                      >
+                        <Share2 size={18} strokeWidth={2.5} />
+                        <span>SHARE</span>
+                      </button>
 
-                    {/* 3. Save / Download to Camera Roll */}
-                    <button
-                      type="button"
-                      onClick={() => downloadMeme(currentLightboxMeme)}
-                      className="flex flex-col items-center gap-1 p-1 text-[#FACC15] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
-                    >
-                      <Download size={20} strokeWidth={2.5} />
-                      <span className="font-mono text-[9px] font-bold uppercase">SAVE</span>
-                    </button>
+                      {/* 3. REMOVE */}
+                      <button
+                        type="button"
+                        onClick={handleDeleteCurrentInLightbox}
+                        className="flex items-center justify-center gap-1.5 py-3 px-2 bg-[#FF2A85] hover:bg-[#ff55a0] text-white border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[13px] uppercase tracking-wide"
+                        title="Remove from Vault"
+                      >
+                        <Trash2 size={18} strokeWidth={2.5} />
+                        <span>REMOVE</span>
+                      </button>
+                    </div>
 
-                    {/* 4. Pin to Board */}
-                    <button
-                      type="button"
-                      onClick={() => handlePin(currentLightboxMeme)}
-                      className="flex flex-col items-center gap-1 p-1 text-[#A855F7] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
-                    >
-                      <LayoutGrid size={20} strokeWidth={2.5} />
-                      <span className="font-mono text-[9px] font-bold uppercase">PIN</span>
-                    </button>
+                    {/* Secondary Action Row: LIKE, SWIPE HINT, and PIN */}
+                    <div className="flex items-center justify-between px-2 pt-1 border-t border-white/10 text-outline">
+                      <button
+                        type="button"
+                        onClick={() => toggleLike(currentLightboxMeme)}
+                        className={`flex items-center gap-1.5 text-[12px] font-mono font-bold uppercase transition-all cursor-pointer ${
+                          likedMemes.includes(currentLightboxMeme.url) ? 'text-[#FF2A85]' : 'text-outline hover:text-white'
+                        }`}
+                      >
+                        <Heart
+                          size={16}
+                          strokeWidth={2.5}
+                          fill={likedMemes.includes(currentLightboxMeme.url) ? '#FF2A85' : 'none'}
+                        />
+                        <span>{likedMemes.includes(currentLightboxMeme.url) ? 'LIKED' : 'LIKE'}</span>
+                      </button>
 
-                    {/* 5. Delete from Vault */}
-                    <button
-                      type="button"
-                      onClick={handleDeleteCurrentInLightbox}
-                      className="flex flex-col items-center gap-1 p-1 text-[#FF2A85] hover:brightness-125 active:scale-90 transition-all cursor-pointer"
-                    >
-                      <Trash2 size={20} strokeWidth={2.5} />
-                      <span className="font-mono text-[9px] font-bold uppercase">DELETE</span>
-                    </button>
+                      <div className="text-[10px] font-mono text-outline/60 uppercase tracking-widest">
+                        SWIPE TO BROWSE
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePin(currentLightboxMeme)}
+                        className="flex items-center gap-1.5 text-[12px] font-mono font-bold text-[#A855F7] hover:text-[#C084FC] uppercase transition-all cursor-pointer"
+                      >
+                        <LayoutGrid size={16} strokeWidth={2.5} />
+                        <span>PIN TO BOARD</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

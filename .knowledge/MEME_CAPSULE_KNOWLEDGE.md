@@ -599,6 +599,16 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
 ### 3.16 Navigation Dock, CTA Icon Symmetry & Reaction Picker Repositioning (`src/App.tsx`)
 - **Vault Symbol Harmonization:** The bottom navigation dock's Vault button symbol was updated from `<Flame size={22} strokeWidth={2.5} />` to `<Bookmark size={22} strokeWidth={2.5} />`, creating 100% visual symmetry with the canvas `SAVED` CTA button bookmark icon while preserving the neo-brutalist outline aesthetic across all 4 dock buttons (`Home`, `Vault / Favorites`, `Moodboards`, `Settings`).
 - **Reaction Picker Positioning:** Repositioned the reaction picker popup from the top of the canvas (`top-4`) down to just above the 4 CTA buttons (`bottom-4`), featuring a dismiss backdrop and native pointer/long-press detection on the LIKE button without accidental Like state toggling.
+- **Long-Press Reaction Picker Glitch & Oscillation Fix:**
+  - Resolved race condition and double-toggle oscillation where long-pressing the LIKE button caused the reaction picker to rapidly glitch, opening and immediately closing:
+    1. Replaced boolean toggle `setShowReactionPicker((prev) => !prev)` in long-press timer (450ms) and `onContextMenu` with explicit idempotent activation `setShowReactionPicker(true)`. Previously, Android's native long-press threshold (~500ms) fired a `contextmenu` event 50ms after the 450ms timer opened the picker, inverting `prev` and immediately slamming the reaction picker shut.
+    2. Added distance drag threshold check (`dist > 10px`) in `onPointerMove` and `onPointerLeave` cancellation so finger movement or drag gestures cancel the pending long-press timer.
+    3. Filtered `onPointerDown` to primary pointer/button only (`e.button === 0`).
+    4. Guarded synthetic click after long-press release via `isLikeLongPressRef` with a 250ms cooldown window to prevent accidental Like state toggling.
+    5. Supported tap-to-dismiss on the LIKE button when the reaction picker is already active.
+    6. Added `onPointerDown` event containment on the dismiss backdrop (`e.stopPropagation()`).
+    7. Ensured tapping VAULT dismisses any active reaction or board pickers.
+  - **Build Artifacts Recompiled:** Release APK (`builds/app-release.apk` / `builds/meme-capsule-latest.apk` / `builds/meme-capsule-v3.8.apk`, 6.1MB), Debug APK (`builds/meme-capsule-debug.apk`, 12.5MB), and Release AAB (`builds/app-release.aab` / `builds/meme-capsule-v3.8.aab`, 8.0MB) recompiled and synced.
 
 ### 3.17 Mobile Phone Gallery UI Transformation for Meme Vault (`src/App.tsx`)
 - **Native Phone Album / Gallery Architecture:**
@@ -607,6 +617,46 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
   - **Fullscreen Media Viewer (Lightbox):** Tapping any photo tile immediately launches an immersive full-screen viewer with next/previous image navigation, image counter (`{index} / {total}`), and a 5-action mobile gallery toolbar (Like toggle, Native Share, MediaStore Gallery Download, Mood Board Pinning, and Vault Deletion with auto-advance).
   - **Multi-Selection & Batch Actions:** "SELECT" mode allows tapping photo tiles with interactive circular checkboxes, accompanied by a sticky batch action bar for bulk Camera Roll saving, bulk Pinning, and bulk Deletion.
   - **Album Filter Pills & Live Search:** Instant client-side search with clear action and quick category filter tabs (`ALL`, `❤️ LIKED`, `REDDIT`, `CURATED`).
+
+### 3.18 Reaction Dock Animations, Custom Emoji Support & Pin Bottom Sheet (`src/App.tsx`, `src/index.css`)
+- **Smooth Popover & Dock Animations:**
+  - Added spring slide-in and scale entrance animations for the reaction dock (`.animate-reaction-dock` with `@keyframes reaction-dock-in`, `0.26s cubic-bezier(0.16, 1, 0.3, 1)`), `#moreMenu` popover (`.animate-more-menu` with `@keyframes more-menu-slide-in`, `0.24s cubic-bezier(0.16, 1, 0.3, 1)`), and bottom sheets (`.animate-pin-sheet`).
+  - Added smooth fade-in transitions (`.animate-fadeIn`) to dimmed overlay backdrops.
+- **WhatsApp-Style Horizontal Reaction Scroll & Custom Emoji Additions:**
+  - Expanded reaction picker into a horizontally scrollable bar (`overflow-x-auto`, `scrollbar-none`, `touch-pan-x`) supporting default meme reactions (`💀`, `🔥`, `😂`, `🗿`, `❤️`, `👑`, `😭`, `🤡`, `🤯`, `💩`, `💯`, `🫡`) and user custom additions.
+  - Integrated a dedicated `+` button at the right end of the reaction bar opening an "ADD CUSTOM REACTION" bottom sheet with text input for native mobile emoji keyboard input plus a 32-sticker quick-pick preset grid.
+  - Custom emojis persist in `localStorage` under `meme_capsule_user_custom_reactions` and auto-apply reactions to the active meme.
+- **Clean-Slate Mood Boards Initialization (0 Default Boards):**
+  - Added clean-slate initialization check (`meme_capsule_boards_clean_slate_v39`) ensuring fresh installs and updates start with strictly 0 mood boards, letting users build and name their own custom boards from scratch.
+  - Purged legacy pre-populated/test boards while maintaining custom user boards.
+- **Mood Boards Pin Bottom Sheet & Scroll Optimization:**
+  - Converted the Pin to Mood Board picker from a static, cramped top overlay into a native Neo-Brutalist bottom sheet drawer (matching the Share Sheet) positioned at `bottom-0`.
+  - Added smooth vertical scrolling (`max-h-[48vh]`, `overflow-y-auto`, `overscroll-contain`, `WebkitOverflowScrolling: touch`) with touch isolation so scrolling boards never triggers card swiping or page dragging.
+  - Included a compact thumbnail preview row, "+ NEW BOARD" header shortcut, and an engaging empty state ("NO MOOD BOARDS YET") with "+ CREATE FIRST BOARD" action button.
+- **Production Build Artifacts:**
+  - Release APK (`builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.8.apk`, 5.8MB) and Release AAB (`builds/app-release.aab`, `builds/meme-capsule-v3.8.aab`, 7.7MB) recompiled and verified.
+
+### 3.19 Vault Non-Blocking Toast, Lightbox Safe-Area & Swipe Navigation Overhaul (v3.9 / VersionCode 31)
+- **Non-Blocking Vault Toast & Zero Swipe Delay (`src/App.tsx`):**
+  - Added `pointer-events-none select-none` to the `toastText` container in `src/App.tsx`, preventing toast alerts from intercepting drag/swipe touch gestures or blocking CTA button taps.
+  - Shortened notification toast auto-dismiss duration from 2500ms to 1500ms and added `toastTimeoutRef` cancellation so consecutive saves clear instantly without touch lockout or swipe delays.
+- **Android Status Bar & Notification Tray Safe-Area Optimization:**
+  - Resolved status bar clipping on mobile devices by adding `paddingTop: calc(env(safe-area-inset-top, 0px) + 12px)` and solid high-contrast styling (`bg-[#0d0c14]/95`, `border-b-[2px] border-white/20`) to the Vault Lightbox header.
+  - Replaced cramped close controls with a high-contrast Neo-Brutalist `BACK` button, centered photo index badge, and a dedicated high-visibility close (`✕`) button (`bg-[#FF2A85] text-white border-[2px] border-black shadow-[2px_2px_0px_#000]`), completely eliminating interference from Android notification icons and status bar elements.
+- **Touch & Pointer Swipe Navigation for Vault Gallery:**
+  - Removed chevron arrow buttons (`<ChevronLeft>` / `<ChevronRight>`) on photo sides.
+  - Implemented responsive horizontal touch & pointer swipe listeners (`onTouchStart`, `onTouchMove`, `onTouchEnd`, `onPointer*`) with real-time translation tracking, boundary resistance damping, and snap-to-advance logic (`dx > 36px` to navigate previous, `dx < -36px` to navigate next).
+- **Dedicated Gallery CTA Toolbar (SAVE, SHARE, REMOVE):**
+  - Added a prominent 3-column Neo-Brutalist primary action bar directly below the meme canvas and metadata:
+    - `SAVE`: Downloads meme directly to native Android MediaStore / device gallery.
+    - `SHARE`: Triggers native Android share sheet with viral share message.
+    - `REMOVE`: Removes the meme from the Vault with immediate visual feedback.
+  - Positioned secondary actions (`LIKE` toggle, swipe instruction hint, and `PIN TO BOARD`) beneath the primary CTAs with safe bottom insets (`calc(env(safe-area-inset-bottom, 0px) + 16px)`).
+- **Meme Canvas Border in Lightbox Gallery:**
+  - Added a signature Neo-Brutalist border (`border-[3px] border-secondary-container shadow-[6px_6px_0px_#000000] bg-black`) around the active meme canvas in the vault lightbox.
+- **Production Binaries:**
+  - Bumped version to `v3.9` (`versionCode 31`).
+  - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (6.1MB), `builds/meme-capsule-debug.apk` (12.3MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (8.1MB).
 
 ---
 
