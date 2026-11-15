@@ -1927,30 +1927,85 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
     persistSeenMemes,
   ]);
 
-  const swipeToPrevious = useCallback(() => {
-    if (memeHistory.length === 0) return;
-    setShowReactionPicker(false);
-    setShowBoardPicker(false);
-    const prevIdx = historyIndex === -1 ? memeHistory.length - 1 : Math.max(0, historyIndex - 1);
-    const prevMeme = memeHistory[prevIdx];
+  const lastRevertTimestampRef = useRef<number>(0);
+  const lastTopSpaceTapRef = useRef<number>(0);
+
+  const triggerRevertPreviousMeme = useCallback(() => {
+    const now = Date.now();
+    if (now - lastRevertTimestampRef.current < 450) {
+      return;
+    }
+    lastRevertTimestampRef.current = now;
+
+    if (memeHistory.length < 2 && historyIndex <= 0) {
+      return;
+    }
+
+    const currentIdx =
+      historyIndex === -1
+        ? (meme ? memeHistory.findIndex((m) => m.url === meme.url) : -1)
+        : historyIndex;
+
+    const effectiveIdx = currentIdx !== -1 ? currentIdx : memeHistory.length - 1;
+    const targetIdx = effectiveIdx - 1;
+
+    if (targetIdx < 0 || targetIdx >= memeHistory.length) {
+      return;
+    }
+
+    const prevMeme = memeHistory[targetIdx];
     if (!prevMeme) return;
 
-    setExitDirection('down');
-    setIsTransitioning(true);
+    setShowReactionPicker(false);
+    setShowBoardPicker(false);
 
-    setTimeout(() => {
-      setExitDirection(null);
-      setSwipeDirection('down');
-      setImageFailed(false);
-      setMeme(prevMeme);
-      setHistoryIndex(prevIdx);
+    // Keep current meme in queue right behind prevMeme so user can forward-swipe back to it
+    if (meme) {
+      setMemeQueue((prevQueue) => {
+        const filtered = prevQueue.filter((m) => m.url !== meme.url && m.url !== prevMeme.url);
+        return [meme, ...filtered];
+      });
+    }
 
-      setTimeout(() => {
-        setSwipeDirection(null);
-        setIsTransitioning(false);
-      }, 400);
-    }, 280);
-  }, [memeHistory, historyIndex]);
+    setImageFailed(false);
+    setMeme(prevMeme);
+    setHistoryIndex(targetIdx);
+
+    // Trigger smooth reel rewind animation on the front card
+    stackRef.current?.triggerRevert?.();
+
+    // Subtle native haptic tick
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([12, 24, 12]);
+      }
+    } catch {}
+  }, [meme, memeHistory, historyIndex]);
+
+  const handleTopNegativeSpaceTap = (e: React.MouseEvent) => {
+    const now = Date.now();
+    if (now - lastTopSpaceTapRef.current < 400) {
+      lastTopSpaceTapRef.current = 0;
+      triggerRevertPreviousMeme();
+    } else {
+      lastTopSpaceTapRef.current = now;
+    }
+  };
+
+  const handleTopNegativeSpaceTouch = (e: React.TouchEvent) => {
+    if (e.touches && e.touches.length > 1) return;
+    const now = Date.now();
+    if (now - lastTopSpaceTapRef.current < 400) {
+      lastTopSpaceTapRef.current = 0;
+      triggerRevertPreviousMeme();
+    } else {
+      lastTopSpaceTapRef.current = now;
+    }
+  };
+
+  const swipeToPrevious = useCallback(() => {
+    triggerRevertPreviousMeme();
+  }, [triggerRevertPreviousMeme]);
 
   const handleTouchEnd = useCallback(() => {
     if (touchStartY === null || isTransitioning) return;
@@ -2960,7 +3015,24 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
             )}
 
             {screen === 'viewing' && meme && (
-              <section className="w-full flex flex-col items-center justify-center flex-grow gap-2 mt-1">
+              <section
+                className="w-full flex flex-col items-center justify-center flex-grow gap-2 mt-1"
+                onDoubleClick={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('button') && !target.closest('input')) {
+                    triggerRevertPreviousMeme();
+                  }
+                }}
+              >
+                {/* Secret Easter Egg: Invisible hit area in negative space above meme canvas to rewind previously viewed meme */}
+                <div
+                  className="w-full max-w-[500px] h-8 sm:h-12 flex items-center justify-center select-none cursor-default touch-manipulation -mb-2"
+                  onClick={handleTopNegativeSpaceTap}
+                  onDoubleClick={triggerRevertPreviousMeme}
+                  onTouchEnd={handleTopNegativeSpaceTouch}
+                  aria-hidden="true"
+                />
+
                 {/* 4-Card Stacked Deck Interactive Container */}
                 <div
                   className="flex flex-col items-center relative transition-all duration-200"

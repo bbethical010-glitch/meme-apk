@@ -10,6 +10,7 @@ export interface MemeStackRef {
   triggerKeep: () => void;
   triggerSkip: () => void;
   triggerSave: () => void;
+  triggerRevert: () => void;
 }
 
 interface MemeStackProps {
@@ -230,11 +231,24 @@ export const MemeStack = forwardRef<MemeStackRef, MemeStackProps>(
       }, 260);
     };
 
-    // Imperative methods for external triggers (like HIT ME button)
+    // Imperative methods for external triggers (like HIT ME button & secret rewind easter egg)
     useImperativeHandle(ref, () => ({
       triggerKeep: () => dismissCard('keep'),
       triggerSkip: () => dismissCard('skip'),
       triggerSave: () => dismissCard('save'),
+      triggerRevert: () => {
+        // Animate front card sliding/springing down from top (like Instagram reel swipe down)
+        api.start((i) => {
+          if (i === 0) {
+            return {
+              from: { y: -220, scale: 0.92, opacity: 0.4 },
+              to: { y: 0, scale: 1.0, opacity: 1.0 },
+              config: { tension: 280, friction: 22, mass: 0.9 },
+            };
+          }
+          return {};
+        });
+      },
     }));
 
     // Gesture binding for Position 0 using @use-gesture/react

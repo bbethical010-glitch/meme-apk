@@ -657,6 +657,10 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
 - **Top Branded Header for Gallery Section:**
   - Extended the signature Neo-Brutalist top header (`MEME CAPSULE` title with Settings shortcut and Store button) to display on the Gallery section (`activeTab === 'favorites'`), creating unified visual branding across both the landing page and photo gallery.
   - Implemented mobile safe-area insets (`paddingTop: calc(env(safe-area-inset-top, 0px) + 8px)`) and adaptive content top spacing (`pt-2`) to avoid notch collision and prevent double-padding.
+- **Hidden Rewind Easter Egg Mechanism:**
+  - Added an invisible double-click and double-tap hit area in the negative space directly above the meme canvas (`src/App.tsx`).
+  - Double-clicking/double-tapping reverts to the previous meme from `memeHistory`, while preserving the active meme at the head of `memeQueue` so users can swipe forward again.
+  - Features an animated reel slide-down entrance (`from: { y: -220, scale: 0.92, opacity: 0.4 }, to: { y: 0, scale: 1.0, opacity: 1.0 }`) via `MemeStackRef.triggerRevert` and subtle haptic feedback. Completely hidden and unmentioned across all user-facing UI.
 - **Production Binaries:**
   - Bumped version to `v3.9` (`versionCode 31`).
   - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (6.1MB), `builds/meme-capsule-debug.apk` (12.3MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (8.1MB).
