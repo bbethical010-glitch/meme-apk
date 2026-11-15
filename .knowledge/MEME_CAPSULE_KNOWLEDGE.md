@@ -654,6 +654,9 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
   - Positioned secondary actions (`LIKE` toggle, swipe instruction hint, and `PIN TO BOARD`) beneath the primary CTAs with safe bottom insets (`calc(env(safe-area-inset-bottom, 0px) + 16px)`).
 - **Meme Canvas Border in Lightbox Gallery:**
   - Added a signature Neo-Brutalist border (`border-[3px] border-secondary-container shadow-[6px_6px_0px_#000000] bg-black`) around the active meme canvas in the vault lightbox.
+- **Top Branded Header for Gallery Section:**
+  - Extended the signature Neo-Brutalist top header (`MEME CAPSULE` title with Settings shortcut and Store button) to display on the Gallery section (`activeTab === 'favorites'`), creating unified visual branding across both the landing page and photo gallery.
+  - Implemented mobile safe-area insets (`paddingTop: calc(env(safe-area-inset-top, 0px) + 8px)`) and adaptive content top spacing (`pt-2`) to avoid notch collision and prevent double-padding.
 - **Production Binaries:**
   - Bumped version to `v3.9` (`versionCode 31`).
   - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (6.1MB), `builds/meme-capsule-debug.apk` (12.3MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (8.1MB).

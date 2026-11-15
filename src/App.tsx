@@ -2825,9 +2825,12 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         }}
       />
 
-      {/* Top Header — Visible on Landing Page, disappears as soon as HIT ME is pressed */}
-      {activeTab === 'home' && screen === 'waiting' && (
-        <header className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)] animate-in fade-in duration-200">
+      {/* Top Header — Visible on Landing Page and Gallery Section */}
+      {((activeTab === 'home' && screen === 'waiting') || activeTab === 'favorites') && (
+        <header
+          className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)] animate-in fade-in duration-200"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
+        >
           <div className="flex items-center justify-between w-full max-w-[1200px] mx-auto">
             {/* Left Slot: Neo-Brutalist Settings Button */}
             <div className="w-[84px] flex items-center justify-start shrink-0">
@@ -2884,7 +2887,11 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         </header>
       )}
 
-      <main className="flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm pt-[max(env(safe-area-inset-top),16px)] py-2 gap-2 pb-[calc(88px+max(env(safe-area-inset-bottom,0px),16px))]">
+      <main className={`flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm ${
+        ((activeTab === 'home' && screen === 'waiting') || activeTab === 'favorites')
+          ? 'pt-2'
+          : 'pt-[max(env(safe-area-inset-top),16px)]'
+      } py-2 gap-2 pb-[calc(88px+max(env(safe-area-inset-bottom,0px),16px))]`}>
         {activeTab === 'home' && (
           <div className="w-full flex flex-col items-center justify-center flex-grow">
             {screen === 'waiting' && (
