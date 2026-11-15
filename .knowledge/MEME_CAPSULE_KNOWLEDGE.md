@@ -663,7 +663,20 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
   - Features an animated reel slide-down entrance (`from: { y: -220, scale: 0.92, opacity: 0.4 }, to: { y: 0, scale: 1.0, opacity: 1.0 }`) via `MemeStackRef.triggerRevert` and subtle haptic feedback. Completely hidden and unmentioned across all user-facing UI.
 - **Production Binaries:**
   - Bumped version to `v3.9` (`versionCode 31`).
-  - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (6.1MB), `builds/meme-capsule-debug.apk` (12.3MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (8.1MB).
+  - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (5.8MB), `builds/meme-capsule-debug.apk` (12MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (7.7MB).
+
+### 3.20 On-Demand Mood Board Ad Reward Flow & Full-Page Settings Redesign (v3.9 / VersionCode 31)
+- **On-Demand Mood Board Ad Flow (`src/App.tsx`):**
+  - Completely removed the static inline "WATCH AD FOR +1 BOARD" banner block from the Mood Boards tab.
+  - Implemented on-demand board limit interception (`isBoardLimitModalOpen`): when a free-tier user reaches their mood board limit and taps `+ NEW BOARD`, a dedicated modal is presented rather than cluttering the tab UI.
+  - Watching a rewarded video ad grants `+1` bonus board slot (`grantBonusBoard`), increments the user's quota, and automatically opens the board creation composer.
+  - Integrated direct CTA to unlock unlimited boards via the Neo-Brutalist Store.
+- **Full-Page Settings Architecture (`src/App.tsx`):**
+  - Transformed Settings from an enclosed modal card with heavy drop-shadows into a first-class, full-width page layout matching Mood Boards and Vault Gallery (`max-w-[840px] px-1 sm:px-2 pb-16`).
+  - Maintained sticky top header (`MEME CAPSULE` with toggle back to Home) and smooth segmented category navigation (`EXPERIENCE`, `MEMBERSHIP`, `PRIVACY`).
+  - Updated the Settings footer metadata label to `MEME CAPSULE v3.9 (BUILD 31)`.
+- **Production Binaries:**
+  - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (5.8MB), `builds/meme-capsule-debug.apk` (12MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (7.7MB).
 
 ---
 

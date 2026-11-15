@@ -415,6 +415,7 @@ export default function App() {
   const [rewardBusy, setRewardBusy] = useState(false);
   const rewardBusyRef = useRef(false);
   const [boardLimitReached, setBoardLimitReached] = useState(false);
+  const [isBoardLimitModalOpen, setIsBoardLimitModalOpen] = useState(false);
   const [, refreshPerks] = useState(0);
   const [isDobModalOpen, setIsDobModalOpen] = useState(false);
   const [userDob, setUserDob] = useState<string | null>(() => localStorage.getItem('meme_capsule_user_dob'));
@@ -2472,7 +2473,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
   const requestBoardCreation = () => {
     if (!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards)) {
       setBoardLimitReached(true);
-      setActiveTab('boards');
+      setIsBoardLimitModalOpen(true);
       return;
     }
     setIsBoardComposerOpen(true);
@@ -2482,7 +2483,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
     if (!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards)) {
       setIsBoardComposerOpen(false);
       setBoardLimitReached(true);
-      setActiveTab('boards');
+      setIsBoardLimitModalOpen(true);
       return;
     }
     const raw = customTitle || boardTitle;
@@ -2851,6 +2852,84 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         onCreateBoard={(title, color) => createMoodBoard(title, color)}
       />
 
+      {/* Board Limit & Rewarded Ad Modal */}
+      {isBoardLimitModalOpen && (
+        <div
+          className="fixed inset-0 z-[1050] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
+          onClick={() => setIsBoardLimitModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-[420px] bg-surface-container border-[4px] border-secondary-container shadow-[8px_8px_0px_#000] p-5 flex flex-col gap-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b-2 border-outline/30 pb-3">
+              <div>
+                <span className="font-label-md text-[11px] text-secondary-container font-bold uppercase tracking-wider block">
+                  CAPACITY LIMIT
+                </span>
+                <h3 className="font-headline-xl text-[24px] sm:text-[28px] text-white tracking-tight uppercase leading-none mt-1">
+                  BOARD LIMIT REACHED
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBoardLimitModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center bg-surface-container-high border-2 border-black text-white hover:bg-surface-container font-bold cursor-pointer active:scale-95 transition-all"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Description */}
+            <p className="font-body-md text-[13px] text-neutral-300 leading-relaxed">
+              You've reached your free limit of <strong className="text-secondary-container">{FREE_BOARD_LIMIT} mood boards</strong>. Watch a quick video to unlock <strong className="text-primary">+1 board slot</strong> for this session, or unlock Board Boss for unlimited boards forever!
+            </p>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-2.5 pt-1">
+              {/* Option 1: Watch Ad for +1 Board Slot */}
+              <button
+                type="button"
+                disabled={rewardBusy}
+                onClick={async () => {
+                  await watchForReward(() => {
+                    grantBonusBoard();
+                    setBoardLimitReached(false);
+                    setIsBoardLimitModalOpen(false);
+                    setIsBoardComposerOpen(true);
+                  }, '+1 BOARD SLOT UNLOCKED! ✓');
+                }}
+                className="w-full py-3 px-4 bg-primary text-black font-label-xl text-[13px] uppercase font-bold border-[3px] border-black shadow-[4px_4px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <span>{entitlements.adsRemoved ? 'CLAIM +1 BOARD SLOT' : '🔒 WATCH AD FOR +1 BOARD'}</span>
+              </button>
+
+              {/* Option 2: Unlock Unlimited Boards */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBoardLimitModalOpen(false);
+                  openStore({ focus: PRODUCTS.UNLIMITED_BOARDS });
+                }}
+                className="w-full py-2.5 px-4 bg-[#f4c300] text-black font-label-xl text-[12px] uppercase font-bold border-[2px] border-black shadow-[3px_3px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none hover:brightness-110 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>⚡ UNLOCK UNLIMITED BOARDS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBoardLimitModalOpen(false)}
+                className="py-1 text-center font-label-md text-[11px] text-outline hover:text-white uppercase cursor-pointer"
+              >
+                MAYBE LATER
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Neo-Brutalist Share Bottom Sheet Modal + Persistent Ribbon Above Bottom Dock */}
       <ShareModal
         isOpen={Boolean(shareTargetMeme)}
@@ -2880,18 +2959,18 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         }}
       />
 
-      {/* Top Header — Visible on Landing Page and Gallery Section */}
-      {((activeTab === 'home' && screen === 'waiting') || activeTab === 'favorites') && (
+      {/* Top Header — Persistent across Home waiting, Gallery, Boards, and Settings */}
+      {((activeTab === 'home' && screen === 'waiting') || activeTab === 'favorites' || activeTab === 'boards' || activeTab === 'settings') && (
         <header
           className="bg-background flex flex-col justify-center items-start w-full px-md py-sm gap-xs sticky top-0 z-40 border-b-[3px] border-outline shadow-[4px_4px_0px_0px_var(--color-secondary-container)] animate-in fade-in duration-200"
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}
         >
           <div className="flex items-center justify-between w-full max-w-[1200px] mx-auto">
-            {/* Left Slot: Neo-Brutalist Settings Button */}
+            {/* Left Slot: Neo-Brutalist Settings Button (or Back to Home if on Settings) */}
             <div className="w-[84px] flex items-center justify-start shrink-0">
               <button
                 type="button"
-                onClick={() => setActiveTab('settings')}
+                onClick={() => (activeTab === 'settings' ? setActiveTab('home') : setActiveTab('settings'))}
                 className="w-[38px] h-[38px] flex items-center justify-center cursor-pointer select-none transition-all duration-100 active:translate-x-[1px] active:translate-y-[1px] active:!shadow-none"
                 style={{
                   backgroundColor: '#1c1c1e',
@@ -2899,8 +2978,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                   boxShadow: '2.5px 2.5px 0px #000000',
                   touchAction: 'manipulation',
                 }}
-                title="Open App Settings"
-                aria-label="Open App Settings"
+                title={activeTab === 'settings' ? 'Back to Home' : 'Open App Settings'}
+                aria-label={activeTab === 'settings' ? 'Back to Home' : 'Open App Settings'}
               >
                 <svg
                   width="20"
@@ -2943,7 +3022,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
       )}
 
       <main className={`flex-grow flex flex-col items-center w-full max-w-[1200px] mx-auto px-sm ${
-        ((activeTab === 'home' && screen === 'waiting') || activeTab === 'favorites')
+        ((activeTab === 'home' && screen === 'waiting') || activeTab === 'favorites' || activeTab === 'boards' || activeTab === 'settings')
           ? 'pt-2'
           : 'pt-[max(env(safe-area-inset-top),16px)]'
       } py-2 gap-2 pb-[calc(88px+max(env(safe-area-inset-bottom,0px),16px))]`}>
@@ -4499,23 +4578,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
               </div>
             </div>
 
-            {!canCreateBoard(moodBoards.length, entitlements.unlimitedBoards) && <div className="p-3 bg-surface-container border-2 border-secondary-container shadow-[4px_4px_0_#000] font-label-md">
-              {boardLimitReached && <div className="mb-3">
-                <p className="font-headline-lg text-[16px] text-[#f4c300] uppercase mb-1.5">
-                  BOARD LIMIT REACHED ({FREE_BOARD_LIMIT}/{FREE_BOARD_LIMIT}) - GET BOARD BOSS FOR UNLIMITED BOARDS
-                </p>
-                <button
-                  type="button"
-                  onClick={() => openStore({ focus: PRODUCTS.UNLIMITED_BOARDS })}
-                  className="bg-secondary-container text-black px-4 py-2 border-2 border-black font-label-xl text-[13px] uppercase shadow-[2px_2px_0_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer font-bold"
-                >
-                  UNLOCK UNLIMITED BOARDS
-                </button>
-              </div>}
-              <button disabled={rewardBusy} onClick={() => void watchForBoard()} className="p-2 bg-primary-container border-2 border-black text-white disabled:opacity-50 font-label-xl text-[12px] uppercase cursor-pointer">{entitlements.adsRemoved ? 'CLAIM +1 SESSION SLOT' : '🔒 WATCH AD FOR +1 SLOT'}</button>
-              <p className="text-xs mt-2 text-outline">Extra creation slots last this session. Your saved boards stay.</p>
-            </div>}
-
             {/* Board Content Section */}
             {(() => {
               const currentBoard = selectedBoardId ? moodBoards.find((b) => b.id === selectedBoardId) : null;
@@ -4684,10 +4746,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         )}
 
         {activeTab === 'settings' && (
-          <section className="w-full max-w-[700px] flex flex-col gap-md animate-in slide-in-from-bottom-6 duration-200">
-            {/* Settings Tab Card */}
-            <div className="bg-surface-container border-[4px] border-secondary-container shadow-[6px_6px_0px_0px_var(--color-primary-container)] p-md flex flex-col gap-md">
-              <div className="border-b-[3px] border-outline pb-sm flex items-center justify-between gap-sm">
+          <section className="w-full max-w-[840px] flex flex-col gap-md animate-in fade-in duration-150 pb-16 px-1 sm:px-2">
+            <div className="border-b-[3px] border-outline pb-sm flex items-center justify-between gap-sm">
                 <div>
                   <span className="font-label-md text-[12px] text-secondary-container uppercase tracking-widest block">
                     SYSTEM CONTROL & PRIVACY
@@ -5328,13 +5388,12 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                     </a>
 
                     <div className="flex items-center justify-between px-1 text-[10px] font-label-md text-outline uppercase">
-                      <span>MEME CAPSULE v3.8 (BUILD 30)</span>
+                      <span>MEME CAPSULE v3.9 (BUILD 31)</span>
                       <span>ANTI-ALGORITHM ENTERTAINMENT</span>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
           </section>
         )}
       </main>
