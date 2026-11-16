@@ -3166,66 +3166,11 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                     onLongPress={downloadMeme}
                   />
 
-                  {/* Reaction Picker Overlay with Smooth Animation & Horizontal Scroll */}
-                  {showReactionPicker && meme && (() => {
-                    const allReactions = [...MEME_REACTIONS, ...customReactions];
-                    return (
-                      <>
-                        {/* Dismiss backdrop when reaction picker is open */}
-                        <div
-                          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs animate-fadeIn"
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowReactionPicker(false);
-                          }}
-                        />
-                        <div
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onTouchStart={(e) => e.stopPropagation()}
-                          className="absolute left-1/2 -translate-x-1/2 bottom-4 z-50 flex items-center bg-surface-container-highest/95 border-[3px] border-primary-container shadow-[4px_4px_0px_0px_var(--color-tertiary)] px-2 py-1.5 backdrop-blur-md max-w-[94%] select-none animate-reaction-dock"
-                        >
-                          <div
-                            className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1 px-1 touch-pan-x"
-                            style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
-                          >
-                            {allReactions.map((r) => (
-                              <button
-                                key={r.emoji}
-                                onClick={(e) => { e.stopPropagation(); handleReaction(r.emoji); }}
-                                className={`shrink-0 flex flex-col items-center px-1.5 py-1 transition-all hover:scale-125 active:scale-90 ${
-                                  memeReactions[meme.url] === r.emoji ? 'bg-primary-container/50 border-[2px] border-secondary-container' : 'border-[2px] border-transparent'
-                                }`}
-                                title={r.label}
-                              >
-                                <span className="text-[26px] leading-none animate-reaction-pop">{r.emoji}</span>
-                                <span className="font-label-md text-[9px] text-outline uppercase mt-0.5">{r.label}</span>
-                              </button>
-                            ))}
-                            {/* WhatsApp-Style (+) Button to Add Custom Emojis */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIsAddEmojiModalOpen(true);
-                              }}
-                              className="shrink-0 flex flex-col items-center justify-center w-[42px] h-[44px] bg-surface-container border-2 border-secondary-container hover:bg-secondary-container hover:text-black text-secondary-container active:scale-90 transition-all cursor-pointer shadow-[2px_2px_0_#000]"
-                              title="Add Custom Emoji"
-                            >
-                              <Plus size={18} strokeWidth={3} />
-                              <span className="font-label-md text-[8px] uppercase font-bold mt-0.5">ADD</span>
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-
-                  {/* Add Custom Emoji Modal */}
+                  {/* Add Custom Emoji Modal - High Polish Neo-Brutalist Bottom Sheet */}
                   {isAddEmojiModalOpen && (
                     <>
                       <div
-                        className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 animate-fadeIn"
+                        className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1060] animate-fadeIn"
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -3235,19 +3180,26 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                       <div
                         onPointerDown={(e) => e.stopPropagation()}
                         onTouchStart={(e) => e.stopPropagation()}
-                        className="fixed bottom-0 left-0 right-0 z-50 max-w-[480px] mx-auto bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-primary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] flex flex-col p-4 pb-safe animate-pin-sheet text-on-surface select-none"
+                        className="fixed bottom-0 left-0 right-0 z-[1070] max-w-[460px] mx-auto bg-[#121118] border-t-[4px] border-x-[4px] border-black shadow-[0px_-8px_32px_rgba(0,0,0,0.9)] flex flex-col p-4 pb-[max(env(safe-area-inset-bottom,0px),20px)] animate-pin-sheet text-on-surface select-none"
                       >
-                        <div className="flex items-center justify-between pb-3 border-b-2 border-outline/30 mb-3">
+                        {/* Header Banner */}
+                        <div className="flex items-center justify-between pb-3 border-b-[3px] border-black mb-3.5 bg-[#f4c300] -mx-4 -mt-4 px-4 py-3 shadow-[0_2px_0_#000]">
                           <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 bg-primary-container border-2 border-black inline-block" />
-                            <h3 className="font-headline-lg text-[18px] text-white uppercase tracking-wider">
-                              ADD CUSTOM REACTION
-                            </h3>
+                            <Smile size={20} strokeWidth={3} className="text-black" />
+                            <div>
+                              <h3 className="font-headline-lg font-mono font-black text-[16px] text-black uppercase tracking-wider leading-none">
+                                CUSTOM REACTIONS
+                              </h3>
+                              <span className="font-mono text-[10px] text-black/80 font-bold uppercase tracking-tight">
+                                ADD EMOJIS TO YOUR DOCK
+                              </span>
+                            </div>
                           </div>
                           <button
                             type="button"
                             onClick={() => setIsAddEmojiModalOpen(false)}
-                            className="w-7 h-7 flex items-center justify-center bg-surface-container-high text-white border-2 border-black font-bold font-mono text-[14px] shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                            className="w-8 h-8 flex items-center justify-center bg-black text-white hover:bg-neutral-800 font-black font-mono text-[15px] shadow-[2px_2px_0px_#fff] active:scale-90 cursor-pointer transition-all"
+                            title="Close modal"
                           >
                             ✕
                           </button>
@@ -3262,36 +3214,93 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                               setCustomEmojiInput('');
                             }
                           }}
-                          className="flex items-center gap-2 mb-3"
+                          className="flex items-center gap-2 mb-3.5"
                         >
                           <input
                             type="text"
                             value={customEmojiInput}
                             onChange={(e) => setCustomEmojiInput(e.target.value)}
-                            placeholder="Type or paste emoji from keyboard..."
+                            placeholder="Paste or type any emoji..."
                             maxLength={8}
-                            className="flex-1 bg-surface-container border-2 border-outline px-3 py-2 text-white font-mono text-[15px] outline-none focus:border-secondary-container"
+                            className="flex-1 bg-[#1c1a24] border-[2px] border-black px-3.5 py-2.5 text-white font-mono text-[15px] outline-none focus:border-[#f4c300] shadow-[2px_2px_0px_#000] placeholder:text-neutral-500"
                           />
                           <button
                             type="submit"
                             disabled={!customEmojiInput.trim()}
-                            className="px-4 py-2 bg-secondary-container text-black font-label-xl text-[12px] font-bold uppercase border-2 border-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-40 cursor-pointer"
+                            className="px-4 py-2.5 bg-[#f4c300] hover:bg-[#ffd633] text-black font-mono font-black text-[13px] uppercase border-[2px] border-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-40 cursor-pointer transition-all shrink-0"
                           >
-                            ADD
+                            + ADD
                           </button>
                         </form>
 
+                        {/* Your Custom Saved Emojis (if any) */}
+                        {customReactions.length > 0 && (
+                          <div className="mb-3.5 bg-[#1a1823] border-[2px] border-black p-2.5 shadow-[2px_2px_0px_#000]">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-mono text-[10px] text-[#A855F7] font-black uppercase tracking-wider">
+                                YOUR CUSTOM EMOJIS ({customReactions.length})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomReactions([]);
+                                  localStorage.removeItem('meme_capsule_user_custom_reactions');
+                                  showToast('CUSTOM EMOJIS RESET', 'secondary');
+                                }}
+                                className="font-mono text-[9px] text-neutral-400 hover:text-[#FF2A85] uppercase underline cursor-pointer"
+                              >
+                                CLEAR ALL
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+                              {customReactions.map((cr, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-1.5 bg-[#23212f] border-[2px] border-black shadow-[2px_2px_0px_#000] px-2 py-1 shrink-0"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => addCustomReaction(cr.emoji)}
+                                    className="text-[20px] active:scale-90 transition-transform cursor-pointer"
+                                    title="React with this emoji"
+                                  >
+                                    {cr.emoji}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = customReactions.filter((_, i) => i !== idx);
+                                      setCustomReactions(updated);
+                                      localStorage.setItem('meme_capsule_user_custom_reactions', JSON.stringify(updated));
+                                      showToast(`REMOVED ${cr.emoji}`, 'secondary');
+                                    }}
+                                    className="text-neutral-400 hover:text-[#FF2A85] font-black text-[12px] cursor-pointer"
+                                    title="Delete emoji"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Preset Grid of Popular Meme Emojis */}
-                        <p className="font-label-md text-[10px] text-outline uppercase tracking-wider mb-2">
-                          QUICK PICK POPULAR EMOJIS:
-                        </p>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-mono text-[11px] text-[#f4c300] font-black uppercase tracking-wider">
+                            QUICK PICK POPULAR EMOJIS:
+                          </span>
+                          <span className="font-mono text-[9px] text-neutral-500 uppercase font-bold">
+                            TAP TO ADD
+                          </span>
+                        </div>
                         <div className="grid grid-cols-8 gap-1.5 overflow-y-auto max-h-[160px] p-1 scrollbar-none overscroll-contain">
                           {PRESET_EMOJIS_GRID.map((em) => (
                             <button
                               key={em}
                               type="button"
                               onClick={() => addCustomReaction(em)}
-                              className="w-10 h-10 flex items-center justify-center bg-surface-container border border-outline/30 hover:border-secondary-container hover:bg-surface-container-high text-[22px] active:scale-90 transition-all cursor-pointer"
+                              className="w-10 h-10 flex items-center justify-center bg-[#1c1a24] hover:bg-[#2a2736] active:bg-[#f4c300] border-[2px] border-black shadow-[2px_2px_0px_#000] text-[22px] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
                             >
                               {em}
                             </button>
@@ -3538,6 +3547,73 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                           }}
                         />
                       )}
+
+                      {/* Dismiss backdrop when reaction picker is open */}
+                      {showReactionPicker && (
+                        <div
+                          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs animate-fadeIn"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowReactionPicker(false);
+                          }}
+                        />
+                      )}
+
+                      {/* Reaction Picker Dock anchored directly above the 4 CTA buttons */}
+                      {showReactionPicker && meme && (() => {
+                        const allReactions = [...MEME_REACTIONS, ...customReactions];
+                        return (
+                          <div
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 z-50 w-full max-w-[356px] bg-[#121118] border-[3px] border-black shadow-[4px_4px_0px_#000] p-1.5 select-none animate-reaction-dock"
+                          >
+                            <div
+                              className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1 px-1 touch-pan-x"
+                              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                            >
+                              {allReactions.map((r) => (
+                                <button
+                                  key={r.emoji}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReaction(r.emoji);
+                                  }}
+                                  className={`shrink-0 flex flex-col items-center justify-center w-[46px] h-[52px] transition-all duration-100 cursor-pointer select-none active:scale-95 ${
+                                    memeReactions[meme.url] === r.emoji
+                                      ? 'bg-[#FF2A85] text-black border-[2px] border-black shadow-[2px_2px_0px_#000]'
+                                      : 'bg-[#22202a] hover:bg-[#2d2a38] text-white border-[2px] border-black shadow-[2px_2px_0px_#000]'
+                                  }`}
+                                  title={r.label}
+                                >
+                                  <span className="text-[24px] leading-none select-none">{r.emoji}</span>
+                                  <span className={`font-mono text-[8px] font-black uppercase mt-1 tracking-tighter truncate max-w-[40px] ${
+                                    memeReactions[meme.url] === r.emoji ? 'text-black font-extrabold' : 'text-[#f4c300]'
+                                  }`}>
+                                    {r.label}
+                                  </span>
+                                </button>
+                              ))}
+
+                              {/* WhatsApp-Style (+) Button to Add Custom Emojis */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsAddEmojiModalOpen(true);
+                                }}
+                                className="shrink-0 flex flex-col items-center justify-center w-[46px] h-[52px] bg-[#f4c300] hover:bg-[#ffd633] text-black border-[2px] border-black shadow-[2px_2px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer font-bold select-none"
+                                title="Add Custom Emoji"
+                              >
+                                <Plus size={20} strokeWidth={3.5} />
+                                <span className="font-mono text-[8px] font-black uppercase mt-1 tracking-wider">ADD</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* 1. LIKE */}
                       <button
@@ -4324,33 +4400,38 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
               {/* Fullscreen Phone Gallery Lightbox / Media Viewer */}
               {vaultLightboxIndex !== null && currentLightboxMeme && (
                 <div
-                  className="fixed inset-0 z-50 bg-[#07060a]/98 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
+                  className="fixed inset-0 z-[1050] bg-[#07060a]/98 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
                   onClick={() => setVaultLightboxIndex(null)}
                 >
-                  {/* Lightbox Top Header Bar - Optimized for Notification / Status Bar Safe-Area */}
+                  {/* Lightbox Top Header Bar - High-Contrast Neo-Brutalist Safe-Area Header */}
                   <div
-                    className="w-full px-4 py-3 bg-[#0d0c14]/95 border-b-[2px] border-white/20 flex items-center justify-between z-20 shadow-md"
+                    className="w-full px-4 py-2.5 bg-surface-container-highest border-b-[3px] border-outline flex items-center justify-between z-20 shadow-md"
                     style={{
                       paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
+                    {/* Revert back to album button */}
                     <button
                       type="button"
                       onClick={() => setVaultLightboxIndex(null)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1f1b2e] hover:bg-[#2d2644] text-[#E0E2EC] border-[2px] border-[#6750A4] shadow-[2px_2px_0px_#000] active:scale-95 transition-all cursor-pointer font-bold font-mono text-[12px] uppercase"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f4c300] hover:bg-[#ffd633] text-black border-[2px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer font-label-xl font-black text-[12px] uppercase tracking-wider"
                       title="Back to Vault Album"
                     >
-                      <ChevronLeft size={16} strokeWidth={3} />
+                      <ChevronLeft size={17} strokeWidth={3.5} />
                       <span>ALBUM</span>
                     </button>
 
+                    {/* Counter Badge */}
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-[#A855F7] font-bold bg-[#141218] border border-[#A855F7]/50 px-2.5 py-1 shadow-[2px_2px_0px_#000]">
-                        {vaultLightboxIndex + 1} / {filteredFavorites.length}
+                      <span className="font-mono text-[12px] text-white font-extrabold bg-[#1c1c1e] border-[2px] border-black px-3 py-1 shadow-[2.5px_2.5px_0px_#000] tracking-widest">
+                        <span className="text-[#f4c300]">{vaultLightboxIndex + 1}</span>
+                        <span className="text-neutral-500 mx-1">/</span>
+                        <span className="text-white">{filteredFavorites.length}</span>
                       </span>
                     </div>
 
+                    {/* Right Controls: Reddit badge + Close button */}
                     <div className="flex items-center gap-2">
                       {currentLightboxMeme.source === 'Reddit' && (
                         <button
@@ -4359,16 +4440,17 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                             setRedditInfoMeme(currentLightboxMeme);
                             setIsRedditInfoOpen(true);
                           }}
-                          className="text-[11px] font-bold border-[2px] border-secondary text-secondary bg-[#1a1824] px-2.5 py-1 active:scale-95 cursor-pointer flex items-center gap-1 uppercase font-mono shadow-[2px_2px_0px_#000]"
+                          className="text-[11px] font-black border-[2px] border-black text-white bg-[#FF4500] px-2.5 py-1.5 active:scale-95 cursor-pointer flex items-center gap-1 uppercase font-mono shadow-[2.5px_2.5px_0px_#000]"
+                          title="Reddit Info"
                         >
-                          <Info size={13} strokeWidth={2.5} />
+                          <Info size={14} strokeWidth={3} />
                           <span>REDDIT</span>
                         </button>
                       )}
                       <button
                         type="button"
                         onClick={() => setVaultLightboxIndex(null)}
-                        className="w-9 h-9 flex items-center justify-center bg-[#FF2A85] text-white border-[2px] border-black shadow-[2px_2px_0px_#000] hover:bg-[#FF0066] active:scale-90 transition-all cursor-pointer font-black"
+                        className="w-9 h-9 flex items-center justify-center bg-[#FF2A85] text-white border-[2px] border-black shadow-[3px_3px_0px_#000] hover:bg-[#FF0066] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer font-black"
                         title="Close gallery viewer"
                       >
                         <X size={20} strokeWidth={3} />
@@ -4376,9 +4458,9 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                     </div>
                   </div>
 
-                  {/* Lightbox Center Image Viewport with Touch/Pointer Horizontal Swipe */}
+                  {/* Lightbox Center Content Viewport: Meme Canvas + CTAs Directly Below */}
                   <div
-                    className="flex-1 flex flex-col items-center justify-center relative px-3 py-2 overflow-hidden touch-pan-y"
+                    className="flex-1 flex flex-col items-center justify-center relative px-3 py-2 overflow-y-auto scrollbar-none touch-pan-y"
                     onClick={(e) => e.stopPropagation()}
                     onTouchStart={handleLightboxTouchStart}
                     onTouchMove={handleLightboxTouchMove}
@@ -4389,7 +4471,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                     onPointerUp={handleLightboxTouchEnd}
                     onPointerCancel={handleLightboxTouchEnd}
                   >
-                    {/* Meme Canvas Container with Horizontal Swipe Transform and Arcade Border */}
+                    {/* Meme Canvas Container with Horizontal Swipe Transform and Signature Border */}
                     <div
                       className="relative flex items-center justify-center transition-transform"
                       style={{
@@ -4400,95 +4482,91 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                       <img
                         src={currentLightboxMeme.url}
                         alt={currentLightboxMeme.title}
-                        className="max-h-[56vh] max-w-[92vw] w-auto h-auto object-contain border-[3px] border-secondary-container shadow-[6px_6px_0px_#000000] bg-black select-none pointer-events-none"
+                        className="max-h-[50vh] max-w-[92vw] sm:max-h-[54vh] w-auto h-auto object-contain border-[3px] border-secondary-container shadow-[6px_6px_0px_#000000] bg-black select-none pointer-events-none"
                         draggable={false}
                       />
                     </div>
 
                     {/* Meme Meta Title & Author */}
-                    <div className="text-center px-4 mt-3 max-w-[90vw]">
-                      <h3 className="font-label-xl text-[14px] sm:text-[15px] text-white font-bold truncate uppercase tracking-tight">
+                    <div className="text-center px-4 mt-2.5 max-w-[90vw]">
+                      <h3 className="font-label-xl text-[14px] sm:text-[15px] text-white font-extrabold truncate uppercase tracking-tight">
                         {currentLightboxMeme.title || 'MEME CAPSULE DROP'}
                       </h3>
-                      <p className="font-label-md text-[11px] text-outline mt-0.5 uppercase">
+                      <p className="font-mono text-[11px] text-[#A855F7] mt-0.5 uppercase tracking-wide font-bold">
                         @{currentLightboxMeme.author} {currentLightboxMeme.subreddit ? `• r/${currentLightboxMeme.subreddit}` : ''}
                       </p>
                     </div>
-                  </div>
 
-                  {/* Lightbox Bottom Mobile Gallery Toolbar with SAVE, SHARE, and REMOVE CTAs */}
-                  <div
-                    className="w-full px-4 pt-3 pb-4 bg-[#0d0c14]/95 border-t-[2px] border-white/20 z-20 flex flex-col gap-2.5 shadow-2xl"
-                    style={{
-                      paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Primary 3 CTAs: SAVE, SHARE, REMOVE */}
-                    <div className="grid grid-cols-3 gap-2.5 w-full">
-                      {/* 1. SAVE */}
-                      <button
-                        type="button"
-                        onClick={() => downloadMeme(currentLightboxMeme)}
-                        className="flex items-center justify-center gap-1.5 py-3 px-2 bg-[#FACC15] hover:bg-[#ffe043] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[13px] uppercase tracking-wide"
-                        title="Save / Download Meme"
-                      >
-                        <Download size={18} strokeWidth={2.5} />
-                        <span>SAVE</span>
-                      </button>
+                    {/* Primary CTAs Toolbar: SAVE, SHARE, REMOVE - Placed JUST BELOW the meme canvas! */}
+                    <div
+                      className="w-full max-w-[360px] px-2 mt-3 flex flex-col gap-2 select-none"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="grid grid-cols-3 gap-2 w-full">
+                        {/* 1. SAVE */}
+                        <button
+                          type="button"
+                          onClick={() => downloadMeme(currentLightboxMeme)}
+                          className="flex items-center justify-center gap-1.5 h-[48px] px-2 bg-[#FACC15] hover:bg-[#ffe043] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[12px] sm:text-[13px] uppercase tracking-wider"
+                          title="Save / Download Meme"
+                        >
+                          <Download size={18} strokeWidth={2.8} />
+                          <span>SAVE</span>
+                        </button>
 
-                      {/* 2. SHARE */}
-                      <button
-                        type="button"
-                        onClick={() => shareMeme(currentLightboxMeme)}
-                        className="flex items-center justify-center gap-1.5 py-3 px-2 bg-[#00E5FF] hover:bg-[#60f1ff] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[13px] uppercase tracking-wide"
-                        title="Share Meme"
-                      >
-                        <Share2 size={18} strokeWidth={2.5} />
-                        <span>SHARE</span>
-                      </button>
+                        {/* 2. SHARE */}
+                        <button
+                          type="button"
+                          onClick={() => shareMeme(currentLightboxMeme)}
+                          className="flex items-center justify-center gap-1.5 h-[48px] px-2 bg-[#00E5FF] hover:bg-[#60f1ff] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[12px] sm:text-[13px] uppercase tracking-wider"
+                          title="Share Meme"
+                        >
+                          <Share2 size={18} strokeWidth={2.8} />
+                          <span>SHARE</span>
+                        </button>
 
-                      {/* 3. REMOVE */}
-                      <button
-                        type="button"
-                        onClick={handleDeleteCurrentInLightbox}
-                        className="flex items-center justify-center gap-1.5 py-3 px-2 bg-[#FF2A85] hover:bg-[#ff55a0] text-white border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[13px] uppercase tracking-wide"
-                        title="Remove from Vault"
-                      >
-                        <Trash2 size={18} strokeWidth={2.5} />
-                        <span>REMOVE</span>
-                      </button>
-                    </div>
-
-                    {/* Secondary Action Row: LIKE, SWIPE HINT, and PIN */}
-                    <div className="flex items-center justify-between px-2 pt-1 border-t border-white/10 text-outline">
-                      <button
-                        type="button"
-                        onClick={() => toggleLike(currentLightboxMeme)}
-                        className={`flex items-center gap-1.5 text-[12px] font-mono font-bold uppercase transition-all cursor-pointer ${
-                          likedMemes.includes(currentLightboxMeme.url) ? 'text-[#FF2A85]' : 'text-outline hover:text-white'
-                        }`}
-                      >
-                        <Heart
-                          size={16}
-                          strokeWidth={2.5}
-                          fill={likedMemes.includes(currentLightboxMeme.url) ? '#FF2A85' : 'none'}
-                        />
-                        <span>{likedMemes.includes(currentLightboxMeme.url) ? 'LIKED' : 'LIKE'}</span>
-                      </button>
-
-                      <div className="text-[10px] font-mono text-outline/60 uppercase tracking-widest">
-                        SWIPE TO BROWSE
+                        {/* 3. REMOVE */}
+                        <button
+                          type="button"
+                          onClick={handleDeleteCurrentInLightbox}
+                          className="flex items-center justify-center gap-1.5 h-[48px] px-2 bg-[#FF2A85] hover:bg-[#ff55a0] text-white border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[12px] sm:text-[13px] uppercase tracking-wider"
+                          title="Remove from Vault"
+                        >
+                          <Trash2 size={18} strokeWidth={2.8} />
+                          <span>REMOVE</span>
+                        </button>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handlePin(currentLightboxMeme)}
-                        className="flex items-center gap-1.5 text-[12px] font-mono font-bold text-[#A855F7] hover:text-[#C084FC] uppercase transition-all cursor-pointer"
-                      >
-                        <LayoutGrid size={16} strokeWidth={2.5} />
-                        <span>PIN TO BOARD</span>
-                      </button>
+                      {/* Secondary Action Row: LIKE, SWIPE HINT, and PIN */}
+                      <div className="flex items-center justify-between px-2 pt-1 border-t border-white/10 text-outline">
+                        <button
+                          type="button"
+                          onClick={() => toggleLike(currentLightboxMeme)}
+                          className={`flex items-center gap-1.5 text-[11px] font-mono font-bold uppercase transition-all cursor-pointer active:scale-95 ${
+                            likedMemes.includes(currentLightboxMeme.url) ? 'text-[#FF2A85]' : 'text-neutral-400 hover:text-white'
+                          }`}
+                        >
+                          <Heart
+                            size={15}
+                            strokeWidth={2.6}
+                            fill={likedMemes.includes(currentLightboxMeme.url) ? '#FF2A85' : 'none'}
+                          />
+                          <span>{likedMemes.includes(currentLightboxMeme.url) ? 'LIKED' : 'LIKE'}</span>
+                        </button>
+
+                        <div className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest font-bold">
+                          SWIPE TO BROWSE
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePin(currentLightboxMeme)}
+                          className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-[#A855F7] hover:text-[#C084FC] uppercase transition-all cursor-pointer active:scale-95"
+                        >
+                          <LayoutGrid size={15} strokeWidth={2.6} />
+                          <span>PIN TO BOARD</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -678,6 +678,24 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
 - **Production Binaries:**
   - Generated and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (5.8MB), `builds/meme-capsule-debug.apk` (12MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (7.7MB).
 
+### 3.21 Gallery Lightbox Layout Optimization & Custom Reactions Redesign (v3.9 / VersionCode 31)
+- **Vault Lightbox CTA Placement & Revert Button Styling (`src/App.tsx`):**
+  - Relocated the primary CTAs (`SAVE`, `SHARE`, `REMOVE`) and secondary controls (`LIKE`, `SWIPE TO BROWSE`, `PIN TO BOARD`) directly into the center content stack, placing them **just below the meme canvas and metadata**.
+  - Completely removed the separated bottom toolbar, eliminating the awkward vertical gap on tall phone screens.
+  - Upgraded the `< ALBUM` back button with signature Neo-Brutalist styling (`bg-[#f4c300] text-black border-[2px] border-black shadow-[3px_3px_0px_#000] font-label-xl font-black text-[12px] uppercase tracking-wider`).
+  - Redesigned the photo index badge with high-contrast arcade styling (`font-mono text-[12px] bg-[#1c1c1e] text-white border-[2px] border-black px-3 py-1 shadow-[2.5px_2.5px_0px_#000]`) and the close button (`bg-[#FF2A85] text-white border-[2px] border-black shadow-[3px_3px_0px_#000]`).
+  - Elevated Lightbox z-index to `z-[1050]` for an unobstructed full-screen viewing experience over the navigation dock.
+- **Reaction Picker Dock & Custom Reactions Tab Redesign (`src/App.tsx`):**
+  - Anchored the floating Reaction Picker Dock directly above `ctaRow` (`bottom-full mb-3 left-1/2 -translate-x-1/2 w-full max-w-[356px]`), positioning it exactly above the 4 primary CTA buttons on the home feed.
+  - Standardized all reaction buttons as uniform Neo-Brutalist tactile tiles (`w-[46px] h-[52px]` with `border-[2px] border-black shadow-[2px_2px_0px_#000]`, yellow labels, and hot-pink active states) alongside an identically dimensioned `(+) ADD` button.
+  - Redesigned the Custom Reactions modal as a high-fidelity Neo-Brutalist bottom sheet (`isAddEmojiModalOpen`):
+    - Branded yellow header banner with `Smile` icon and bold `CUSTOM REACTIONS` title.
+    - Custom emoji input field with `+ ADD` submit action.
+    - Interactive "YOUR CUSTOM EMOJIS" chip row with individual delete (`✕`) controls and `CLEAR ALL` option.
+    - Responsive 8-column grid of 32 popular meme presets (`PRESET_EMOJIS_GRID`).
+- **Production Binaries:**
+  - Recompiled and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (5.8MB), `builds/meme-capsule-debug.apk` (12MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (7.7MB).
+
 ---
 
 ## 4. PART B: PROMOTIONAL, PRESS & WEB PLATFORM (`memecapsule.wtf`)
