@@ -35,7 +35,7 @@ export const RedditInfoModal: React.FC<RedditInfoModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-[1070] bg-black/85 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div

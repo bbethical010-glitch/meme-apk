@@ -98,7 +98,7 @@ export const CreateBoardModal: React.FC<CreateBoardModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-150 select-none overflow-y-auto"
+      className="fixed inset-0 z-[1075] bg-black/85 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-150 select-none overflow-y-auto"
       onClick={onClose}
     >
       <div

@@ -696,6 +696,29 @@ Settings was refactored from an ephemeral popup modal into an authentic first-cl
 - **Production Binaries:**
   - Recompiled and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (5.8MB), `builds/meme-capsule-debug.apk` (12MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (7.7MB).
 
+### 3.22 Meme Vault Gallery-Style Preview Bottom Sheet (`VaultPreviewSheet.tsx`)
+- **Native Photo-Gallery Architecture (`src/components/VaultPreviewSheet.tsx`):**
+  - Replaced the legacy inline modal lightbox in `activeTab === 'favorites'` with a dedicated, gesture-driven photo gallery bottom sheet (`z-[1050]`).
+  - **3-Slot Virtualized Pager (`[prev, current, next]`):** High-performance horizontal swiping with finger-tracking lerp, velocity flicking, and dampening overscroll resistance at boundaries (`0.3x`). Smooth 0.22s spring transitions between memes, updating counter badge and active index seamlessly.
+  - **Gesture Isolation:** Strict gesture segmentation via `touch-action: pan-y` on viewport and `touch-action: pan-x` on filmstrip preventing conflicting parent scroll handlers.
+  - **Dynamic Aspect Ratio Framing:** Pre-computes and caches natural image dimensions (`sniffImageDimensions` / `memeDimensionCache`), applying tight aspect-ratio neon purple/yellow border cards (`computeCanvasDimensions`) without layout jump or black sidebars.
+- **Ink-Burst Micro-Interactions (`src/components/CtaInkBurst.tsx`):**
+  - Shared `useCtaInkBurst` hook and `<CtaInkBurstOverlay />` providing 450ms particle bursts on button presses.
+- **Identical 4-Button Home-Screen CTA Toolbar:**
+  - Standardized `.mc-cta-btn` buttons (`SAVE`, `SHARE`, `REMOVE`, `MORE`) with exact fonts, SVG stroke widths, and active press states matching the Home Feed.
+  - `#moreMenu` popover providing access to `LIKE / UNLIKE`, `PIN TO BOARD`, `REDDIT INFO`, and `REPORT MEME`.
+- **Interactive Bottom Filmstrip:**
+  - High-contrast Neo-Brutalist thumbnail strip (`w-14 h-14` tiles) with active indicator, smooth horizontal scroll, and auto-scroll centering on active meme.
+- **Modal Stack Elevation & Report Sync:**
+  - Lifted `BoardPicker` bottom sheet to root level with `z-[1065]`.
+  - Elevated `RedditInfoModal` and `ReportModal` to `z-[1070]`.
+  - Elevated `CreateBoardModal` to `z-[1075]`.
+  - Elevated `ShareModal` backdrop (`z-[1060]`), sheet (`z-[1065]`), and toast (`z-[1090]`).
+  - Fixed `handleSubmitReport` to support `reportTargetMeme || meme` and automatically remove reported memes from favorites.
+  - Hides `ShareModal` ribbon during gallery preview (`showRibbon={activeTab !== 'settings' && vaultLightboxIndex === null}`).
+- **Production Binaries:**
+  - Recompiled and verified `builds/app-release.apk`, `builds/meme-capsule-latest.apk`, `builds/meme-capsule-v3.9.apk` (5.8MB), `builds/meme-capsule-debug.apk` (12MB), and `builds/app-release.aab`, `builds/meme-capsule-v3.9.aab` (7.7MB).
+
 ---
 
 ## 4. PART B: PROMOTIONAL, PRESS & WEB PLATFORM (`memecapsule.wtf`)

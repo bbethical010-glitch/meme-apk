@@ -74,7 +74,7 @@ export default function ReportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[1070] flex items-center justify-center p-4 bg-black/85 backdrop-blur-lg animate-in fade-in duration-200">
       <div className="w-full max-w-[480px] bg-surface-container border-[4px] border-error-container shadow-[8px_8px_0px_0px_var(--color-secondary-container)] relative flex flex-col overflow-hidden text-on-surface max-h-[90vh]">
         {/* Header */}
         <div className="bg-surface-container-low border-b-[3px] border-outline px-md py-sm flex justify-between items-center shrink-0">

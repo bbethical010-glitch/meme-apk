@@ -71,6 +71,7 @@ import PrivacyConsentModal from './components/PrivacyConsentModal';
 import RatingModal from './components/RatingModal';
 import DateOfBirthModal from './components/DateOfBirthModal';
 import { MemeStack, MemeStackRef } from './components/MemeStack';
+import { VaultPreviewSheet } from './components/VaultPreviewSheet';
 import { memeDimensionCache, computeCanvasDimensions, CanvasDimensions } from './utils/dimensions';
 import { initPushNotifications } from './services/pushNotifications';
 import type { Meme, MoodBoard, DismissDecision } from './types';
@@ -400,10 +401,6 @@ export default function App() {
   const [vaultViewCols, setVaultViewCols] = useState<2 | 3 | 4>(3);
   const [vaultFilter, setVaultFilter] = useState<'all' | 'liked' | 'reddit' | 'curated'>('all');
   const [vaultLightboxIndex, setVaultLightboxIndex] = useState<number | null>(null);
-  const [lightboxSwipeDelta, setLightboxSwipeDelta] = useState(0);
-  const [isLightboxSwiping, setIsLightboxSwiping] = useState(false);
-  const lightboxTouchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const lightboxSwipeDeltaRef = useRef<number>(0);
   const [vaultSelectMode, setVaultSelectMode] = useState(false);
   const [vaultSelectedUrls, setVaultSelectedUrls] = useState<Set<string>>(new Set());
   const [toastText, setToastText] = useState<string | null>(null);
@@ -562,6 +559,7 @@ export default function App() {
   const [isAddEmojiModalOpen, setIsAddEmojiModalOpen] = useState(false);
   const [customEmojiInput, setCustomEmojiInput] = useState('');
   const [showBoardPicker, setShowBoardPicker] = useState(false);
+  const [boardPickerTargetMeme, setBoardPickerTargetMeme] = useState<Meme | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [redditInfoMeme, setRedditInfoMeme] = useState<Meme | null>(null);
@@ -2022,7 +2020,8 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
   }, [touchStartY, touchDeltaY, isTransitioning, swipeToNext, swipeToPrevious, memeHistory.length]);
 
   const handleSubmitReport = async (reason: string, details: string) => {
-    if (!meme) return;
+    const target = reportTargetMeme || meme;
+    if (!target) return;
     setIsSubmittingReport(true);
 
     try {
@@ -2032,26 +2031,26 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         currentBlocked = JSON.parse(localStorage.getItem('reported_memes') || '[]');
       } catch (e) {}
 
-      if (!currentBlocked.includes(meme.url)) {
-        currentBlocked.push(meme.url);
+      if (!currentBlocked.includes(target.url)) {
+        currentBlocked.push(target.url);
         localStorage.setItem('reported_memes', JSON.stringify(currentBlocked));
       }
       setBlockedMemesCount(currentBlocked.length);
 
       // Remove from favorites if present
-      if (favorites.some((f) => f.url === meme.url)) {
-        const updatedFavs = favorites.filter((f) => f.url !== meme.url);
+      if (favorites.some((f) => f.url === target.url)) {
+        const updatedFavs = favorites.filter((f) => f.url !== target.url);
         setFavorites(updatedFavs);
         localStorage.setItem('meme_favorites', JSON.stringify(updatedFavs));
       }
 
       const deviceId = await getDeviceId();
       const payload = {
-        meme_id: meme.id || null,
-        meme_url: meme.url,
-        meme_title: meme.title,
-        author: meme.author,
-        source: meme.source || 'Meme Capsule',
+        meme_id: target.id || null,
+        meme_url: target.url,
+        meme_title: target.title,
+        author: target.author,
+        source: target.source || 'Meme Capsule',
         reason,
         details,
         device_id: deviceId,
@@ -2080,41 +2079,46 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
       }
 
       showToast('REPORT FILED. CONTENT BLOCKED.', 'tertiary');
-      trackMemeReported(meme.id || meme.url, reason);
+      trackMemeReported(target.id || target.url, reason);
       setIsReportModalOpen(false);
 
-      if (isMultiDropView && multiDropMemes.length > 1) {
-        const remaining = multiDropMemes.filter((m) => m.url !== meme.url);
-        if (remaining.length > 0) {
-          setMultiDropMemes(remaining);
-          setMultiDropIndex(0);
-          setMeme(remaining[0]);
+      if (meme && target.url === meme.url) {
+        if (isMultiDropView && multiDropMemes.length > 1) {
+          const remaining = multiDropMemes.filter((m) => m.url !== meme.url);
+          if (remaining.length > 0) {
+            setMultiDropMemes(remaining);
+            setMultiDropIndex(0);
+            setMeme(remaining[0]);
+          } else {
+            setIsMultiDropView(false);
+            if (stackRef.current) {
+              stackRef.current.triggerSkip();
+            } else {
+              swipeToNext();
+            }
+          }
         } else {
-          setIsMultiDropView(false);
           if (stackRef.current) {
             stackRef.current.triggerSkip();
           } else {
             swipeToNext();
           }
         }
-      } else {
+      }
+    } catch (err) {
+      console.error('Report submission failed:', err);
+      showToast('REPORT FILED LOCALLY.', 'tertiary');
+      setIsReportModalOpen(false);
+      if (meme && target.url === meme.url) {
         if (stackRef.current) {
           stackRef.current.triggerSkip();
         } else {
           swipeToNext();
         }
       }
-    } catch (err) {
-      console.error('Report submission failed:', err);
-      showToast('REPORT FILED LOCALLY.', 'tertiary');
-      setIsReportModalOpen(false);
-      if (stackRef.current) {
-        stackRef.current.triggerSkip();
-      } else {
-        swipeToNext();
-      }
     } finally {
       setIsSubmittingReport(false);
+      setReportTargetMeme(null);
     }
   };
 
@@ -2578,6 +2582,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
   };
 
   const handlePin = (m: Meme) => {
+    setBoardPickerTargetMeme(m);
     if (moodBoards.length === 0) {
       setShowBoardPicker(true);
       return;
@@ -2930,12 +2935,179 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
         </div>
       )}
 
+      {/* Lifted Board Picker Bottom Sheet (like Share Sheet) */}
+      {showBoardPicker && (boardPickerTargetMeme || meme) && (() => {
+        const pinTarget = boardPickerTargetMeme || meme!;
+        return (
+          <>
+            {/* Dimmed backdrop */}
+            <div
+              className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[1065] animate-fadeIn"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowBoardPicker(false);
+              }}
+            />
+
+            {/* Bottom Sheet Drawer */}
+            <div
+              onPointerDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              className="fixed bottom-0 left-0 right-0 z-[1065] flex flex-col bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-secondary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] max-w-[480px] mx-auto animate-pin-sheet pb-safe select-none text-on-surface"
+              style={{ touchAction: 'pan-y' }}
+            >
+              {/* Neo-Brutalist Drag Handle Bar */}
+              <div
+                className="w-full flex justify-center pt-2.5 pb-1 cursor-pointer"
+                onClick={() => setShowBoardPicker(false)}
+              >
+                <div className="w-14 h-1.5 bg-secondary-container border border-black shadow-[1px_1px_0px_#000]" />
+              </div>
+
+              {/* Sheet Header Bar */}
+              <div className="flex items-center justify-between px-4 py-2 border-b-2 border-outline/30">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 bg-secondary-container border-2 border-black inline-block shrink-0" />
+                  <h2 className="font-headline-lg text-[18px] text-white uppercase tracking-wider leading-none">
+                    PIN TO MOOD BOARD
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowBoardPicker(false);
+                      requestBoardCreation();
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-secondary-container text-black font-label-xl text-[11px] font-bold uppercase border-2 border-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                  >
+                    <Plus size={13} strokeWidth={3} />
+                    <span>NEW BOARD</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBoardPicker(false)}
+                    className="w-7 h-7 flex items-center justify-center bg-surface-container-high text-white border-2 border-black font-bold font-mono text-[14px] shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                    aria-label="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Compact Meme Preview Row */}
+              <div className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-container-low border-b-2 border-outline/20">
+                <div className="w-10 h-10 bg-primary-container border-2 border-black shrink-0 overflow-hidden shadow-[2px_2px_0px_#000]">
+                  <img src={pinTarget.url} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-label-xl text-[12px] text-white uppercase truncate font-bold">
+                    {pinTarget.source === 'Reddit' && pinTarget.title ? pinTarget.title : 'MEME CAPSULE DROP'}
+                  </p>
+                  <span className="font-mono text-[10px] text-secondary-container block">
+                    {moodBoards.length === 0
+                      ? 'NO BOARDS YET — CREATE ONE BELOW'
+                      : 'TAP A BOARD TO PIN OR UNPIN'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Optimised Scrollable Boards List */}
+              <div
+                className="flex flex-col gap-2 p-3 overflow-y-auto max-h-[48vh] scrollbar-none overscroll-contain"
+                style={{
+                  WebkitOverflowScrolling: 'touch',
+                  touchAction: 'pan-y',
+                }}
+              >
+                {moodBoards.length === 0 ? (
+                  <div className="py-6 px-4 text-center flex flex-col items-center gap-2">
+                    <LayoutGrid size={36} className="text-secondary-container mb-1" />
+                    <p className="font-headline-lg text-[16px] text-white uppercase">
+                      NO MOOD BOARDS YET
+                    </p>
+                    <p className="font-label-md text-[11px] text-outline uppercase max-w-[260px]">
+                      Create custom themed boards to organize and save your best meme drops.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowBoardPicker(false);
+                        requestBoardCreation();
+                      }}
+                      className="mt-2 px-4 py-2 bg-secondary-container text-black font-label-xl text-[13px] font-bold uppercase border-2 border-black shadow-[3px_3px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus size={15} strokeWidth={3} />
+                      <span>CREATE FIRST BOARD</span>
+                    </button>
+                  </div>
+                ) : (
+                  moodBoards.map((board) => {
+                    const isPinned = board.memeUrls.includes(pinTarget.url);
+                    const hex = getBoardHex(board.color);
+                    return (
+                      <button
+                        key={board.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMemeOnBoard(board.id, pinTarget);
+                          setSelectedBoardId(board.id);
+                          setShowBoardPicker(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 border-[2px] transition-all text-left cursor-pointer shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 ${
+                          isPinned
+                            ? 'bg-primary-container/40 border-secondary-container text-white'
+                            : 'bg-surface-container border-outline/40 hover:bg-surface-container-high text-on-surface'
+                        }`}
+                        style={{
+                          borderLeftColor: hex,
+                          borderLeftWidth: '5px',
+                          touchAction: 'manipulation',
+                        }}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <span
+                            className="w-3 h-3 shrink-0 border border-black"
+                            style={{ backgroundColor: hex }}
+                          />
+                          <span className="font-label-xl text-[14px] uppercase truncate font-bold">
+                            {board.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-label-md text-[11px] text-outline">
+                            ({board.memeUrls.length} {board.memeUrls.length === 1 ? 'meme' : 'memes'})
+                          </span>
+                          {isPinned ? (
+                            <span className="px-2 py-0.5 bg-secondary-container text-black font-label-xl text-[10px] font-bold uppercase border border-black shadow-[1px_1px_0px_#000] flex items-center gap-0.5">
+                              ✓ PINNED
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 bg-surface-container-high text-outline font-label-xl text-[10px] uppercase border border-outline/40">
+                              + PIN
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       {/* Neo-Brutalist Share Bottom Sheet Modal + Persistent Ribbon Above Bottom Dock */}
       <ShareModal
         isOpen={Boolean(shareTargetMeme)}
         meme={shareTargetMeme}
         activeFallbackMeme={meme || favorites[0] || pinnedMemes[0] || null}
-        showRibbon={activeTab !== 'settings'}
+        showRibbon={activeTab !== 'settings' && vaultLightboxIndex === null}
         onOpen={() => {
           const target = meme || favorites[0] || pinnedMemes[0] || {
             url: 'https://pub-3e7961a132964ff581b779a5dad40771.r2.dev/C3VwSYoOSW__2.jpg',
@@ -3305,170 +3477,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                               {em}
                             </button>
                           ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Board Picker Bottom Sheet (like Share Sheet) */}
-                  {showBoardPicker && meme && (
-                    <>
-                      {/* Dimmed backdrop */}
-                      <div
-                        className="fixed inset-0 bg-black/65 backdrop-blur-sm z-50 animate-fadeIn"
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowBoardPicker(false);
-                        }}
-                      />
-
-                      {/* Bottom Sheet Drawer */}
-                      <div
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onTouchStart={(e) => e.stopPropagation()}
-                        className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-secondary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] max-w-[480px] mx-auto animate-pin-sheet pb-safe select-none text-on-surface"
-                        style={{ touchAction: 'pan-y' }}
-                      >
-                        {/* Neo-Brutalist Drag Handle Bar */}
-                        <div
-                          className="w-full flex justify-center pt-2.5 pb-1 cursor-pointer"
-                          onClick={() => setShowBoardPicker(false)}
-                        >
-                          <div className="w-14 h-1.5 bg-secondary-container border border-black shadow-[1px_1px_0px_#000]" />
-                        </div>
-
-                        {/* Sheet Header Bar */}
-                        <div className="flex items-center justify-between px-4 py-2 border-b-2 border-outline/30">
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 bg-secondary-container border-2 border-black inline-block shrink-0" />
-                            <h2 className="font-headline-lg text-[18px] text-white uppercase tracking-wider leading-none">
-                              PIN TO MOOD BOARD
-                            </h2>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowBoardPicker(false);
-                                requestBoardCreation();
-                              }}
-                              className="flex items-center gap-1 px-2.5 py-1 bg-secondary-container text-black font-label-xl text-[11px] font-bold uppercase border-2 border-black shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
-                            >
-                              <Plus size={13} strokeWidth={3} />
-                              <span>NEW BOARD</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setShowBoardPicker(false)}
-                              className="w-7 h-7 flex items-center justify-center bg-surface-container-high text-white border-2 border-black font-bold font-mono text-[14px] shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
-                              aria-label="Close"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Compact Meme Preview Row */}
-                        <div className="flex items-center gap-2.5 px-4 py-2.5 bg-surface-container-low border-b-2 border-outline/20">
-                          <div className="w-10 h-10 bg-primary-container border-2 border-black shrink-0 overflow-hidden shadow-[2px_2px_0px_#000]">
-                            <img src={meme.url} alt="" className="w-full h-full object-cover" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-label-xl text-[12px] text-white uppercase truncate font-bold">
-                              {meme.source === 'Reddit' && meme.title ? meme.title : 'MEME CAPSULE DROP'}
-                            </p>
-                            <span className="font-mono text-[10px] text-secondary-container block">
-                              {moodBoards.length === 0
-                                ? 'NO BOARDS YET — CREATE ONE BELOW'
-                                : 'TAP A BOARD TO PIN OR UNPIN'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Optimised Scrollable Boards List */}
-                        <div
-                          className="flex flex-col gap-2 p-3 overflow-y-auto max-h-[48vh] scrollbar-none overscroll-contain"
-                          style={{
-                            WebkitOverflowScrolling: 'touch',
-                            touchAction: 'pan-y',
-                          }}
-                        >
-                          {moodBoards.length === 0 ? (
-                            <div className="py-6 px-4 text-center flex flex-col items-center gap-2">
-                              <LayoutGrid size={36} className="text-secondary-container mb-1" />
-                              <p className="font-headline-lg text-[16px] text-white uppercase">
-                                NO MOOD BOARDS YET
-                              </p>
-                              <p className="font-label-md text-[11px] text-outline uppercase max-w-[260px]">
-                                Create custom themed boards to organize and save your best meme drops.
-                              </p>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowBoardPicker(false);
-                                  requestBoardCreation();
-                                }}
-                                className="mt-2 px-4 py-2 bg-secondary-container text-black font-label-xl text-[13px] font-bold uppercase border-2 border-black shadow-[3px_3px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer flex items-center gap-1.5"
-                              >
-                                <Plus size={15} strokeWidth={3} />
-                                <span>CREATE FIRST BOARD</span>
-                              </button>
-                            </div>
-                          ) : (
-                            moodBoards.map((board) => {
-                              const isPinned = board.memeUrls.includes(meme.url);
-                              const hex = getBoardHex(board.color);
-                              return (
-                                <button
-                                  key={board.id}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleMemeOnBoard(board.id, meme);
-                                    setSelectedBoardId(board.id);
-                                    setShowBoardPicker(false);
-                                  }}
-                                  className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 border-[2px] transition-all text-left cursor-pointer shadow-[2px_2px_0px_#000] active:translate-x-0.5 active:translate-y-0.5 ${
-                                    isPinned
-                                      ? 'bg-primary-container/40 border-secondary-container text-white'
-                                      : 'bg-surface-container border-outline/40 hover:bg-surface-container-high text-on-surface'
-                                  }`}
-                                  style={{
-                                    borderLeftColor: hex,
-                                    borderLeftWidth: '5px',
-                                    touchAction: 'manipulation',
-                                  }}
-                                >
-                                  <div className="flex items-center gap-2.5 truncate">
-                                    <span
-                                      className="w-3 h-3 shrink-0 border border-black"
-                                      style={{ backgroundColor: hex }}
-                                    />
-                                    <span className="font-label-xl text-[14px] uppercase truncate font-bold">
-                                      {board.title}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <span className="font-label-md text-[11px] text-outline">
-                                      ({board.memeUrls.length} {board.memeUrls.length === 1 ? 'meme' : 'memes'})
-                                    </span>
-                                    {isPinned ? (
-                                      <span className="px-2 py-0.5 bg-secondary-container text-black font-label-xl text-[10px] font-bold uppercase border border-black shadow-[1px_1px_0px_#000] flex items-center gap-0.5">
-                                        ✓ PINNED
-                                      </span>
-                                    ) : (
-                                      <span className="px-2 py-0.5 bg-surface-container-high text-outline font-label-xl text-[10px] uppercase border border-outline/40">
-                                        + PIN
-                                      </span>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })
-                          )}
                         </div>
                       </div>
                     </>
@@ -4062,62 +4070,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
             showToast(`PINNED ${selected.length} MEMES TO ${targetBoard.title}!`, 'success');
           };
 
-          const handleDeleteCurrentInLightbox = () => {
-            if (!currentLightboxMeme) return;
-            const targetUrl = currentLightboxMeme.url;
-            const updated = favorites.filter((f) => f.url !== targetUrl);
-            setFavorites(updated);
-            localStorage.setItem('meme_favorites', JSON.stringify(updated));
-            showToast('DELETED FROM VAULT', 'tertiary');
-            if (filteredFavorites.length <= 1) {
-              setVaultLightboxIndex(null);
-            } else if (vaultLightboxIndex !== null && vaultLightboxIndex >= filteredFavorites.length - 1) {
-              setVaultLightboxIndex(Math.max(0, filteredFavorites.length - 2));
-            }
-          };
-
-          const handleLightboxTouchStart = (e: React.TouchEvent | React.PointerEvent) => {
-            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.PointerEvent).clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.PointerEvent).clientY;
-            lightboxTouchStartRef.current = { x: clientX, y: clientY };
-            lightboxSwipeDeltaRef.current = 0;
-            setIsLightboxSwiping(true);
-          };
-
-          const handleLightboxTouchMove = (e: React.TouchEvent | React.PointerEvent) => {
-            if (!lightboxTouchStartRef.current) return;
-            const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.PointerEvent).clientX;
-            const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.PointerEvent).clientY;
-            const dx = clientX - lightboxTouchStartRef.current.x;
-            const dy = clientY - lightboxTouchStartRef.current.y;
-            if (Math.abs(dx) > Math.abs(dy)) {
-              let dampedDx = dx;
-              if (
-                (vaultLightboxIndex === 0 && dx > 0) ||
-                (vaultLightboxIndex === filteredFavorites.length - 1 && dx < 0)
-              ) {
-                dampedDx = dx * 0.3;
-              }
-              lightboxSwipeDeltaRef.current = dampedDx;
-              setLightboxSwipeDelta(dampedDx);
-            }
-          };
-
-          const handleLightboxTouchEnd = () => {
-            if (!lightboxTouchStartRef.current) return;
-            const dx = lightboxSwipeDeltaRef.current;
-            const SWIPE_THRESHOLD = 36;
-            if (dx < -SWIPE_THRESHOLD) {
-              setVaultLightboxIndex((i) => (i !== null ? Math.min(filteredFavorites.length - 1, i + 1) : null));
-            } else if (dx > SWIPE_THRESHOLD) {
-              setVaultLightboxIndex((i) => (i !== null ? Math.max(0, i - 1) : null));
-            }
-            lightboxTouchStartRef.current = null;
-            lightboxSwipeDeltaRef.current = 0;
-            setLightboxSwipeDelta(0);
-            setIsLightboxSwiping(false);
-          };
-
           return (
             <section className="w-full max-w-[840px] flex flex-col gap-3 animate-in slide-in-from-bottom-6 duration-200 px-1 sm:px-2">
               <div className="bg-surface-container border-[3px] border-tertiary shadow-[4px_4px_0px_0px_var(--color-primary-container)] p-3 sm:p-4 flex flex-col gap-3">
@@ -4397,180 +4349,35 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
                 </div>
               </div>
 
-              {/* Fullscreen Phone Gallery Lightbox / Media Viewer */}
-              {vaultLightboxIndex !== null && currentLightboxMeme && (
-                <div
-                  className="fixed inset-0 z-[1050] bg-[#07060a]/98 backdrop-blur-md flex flex-col justify-between select-none animate-in fade-in duration-150"
-                  onClick={() => setVaultLightboxIndex(null)}
-                >
-                  {/* Lightbox Top Header Bar - High-Contrast Neo-Brutalist Safe-Area Header */}
-                  <div
-                    className="w-full px-4 py-2.5 bg-surface-container-highest border-b-[3px] border-outline flex items-center justify-between z-20 shadow-md"
-                    style={{
-                      paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Revert back to album button */}
-                    <button
-                      type="button"
-                      onClick={() => setVaultLightboxIndex(null)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f4c300] hover:bg-[#ffd633] text-black border-[2px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer font-label-xl font-black text-[12px] uppercase tracking-wider"
-                      title="Back to Vault Album"
-                    >
-                      <ChevronLeft size={17} strokeWidth={3.5} />
-                      <span>ALBUM</span>
-                    </button>
-
-                    {/* Counter Badge */}
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12px] text-white font-extrabold bg-[#1c1c1e] border-[2px] border-black px-3 py-1 shadow-[2.5px_2.5px_0px_#000] tracking-widest">
-                        <span className="text-[#f4c300]">{vaultLightboxIndex + 1}</span>
-                        <span className="text-neutral-500 mx-1">/</span>
-                        <span className="text-white">{filteredFavorites.length}</span>
-                      </span>
-                    </div>
-
-                    {/* Right Controls: Reddit badge + Close button */}
-                    <div className="flex items-center gap-2">
-                      {currentLightboxMeme.source === 'Reddit' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRedditInfoMeme(currentLightboxMeme);
-                            setIsRedditInfoOpen(true);
-                          }}
-                          className="text-[11px] font-black border-[2px] border-black text-white bg-[#FF4500] px-2.5 py-1.5 active:scale-95 cursor-pointer flex items-center gap-1 uppercase font-mono shadow-[2.5px_2.5px_0px_#000]"
-                          title="Reddit Info"
-                        >
-                          <Info size={14} strokeWidth={3} />
-                          <span>REDDIT</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setVaultLightboxIndex(null)}
-                        className="w-9 h-9 flex items-center justify-center bg-[#FF2A85] text-white border-[2px] border-black shadow-[3px_3px_0px_#000] hover:bg-[#FF0066] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none transition-all cursor-pointer font-black"
-                        title="Close gallery viewer"
-                      >
-                        <X size={20} strokeWidth={3} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Lightbox Center Content Viewport: Meme Canvas + CTAs Directly Below */}
-                  <div
-                    className="flex-1 flex flex-col items-center justify-center relative px-3 py-2 overflow-y-auto scrollbar-none touch-pan-y"
-                    onClick={(e) => e.stopPropagation()}
-                    onTouchStart={handleLightboxTouchStart}
-                    onTouchMove={handleLightboxTouchMove}
-                    onTouchEnd={handleLightboxTouchEnd}
-                    onTouchCancel={handleLightboxTouchEnd}
-                    onPointerDown={handleLightboxTouchStart}
-                    onPointerMove={handleLightboxTouchMove}
-                    onPointerUp={handleLightboxTouchEnd}
-                    onPointerCancel={handleLightboxTouchEnd}
-                  >
-                    {/* Meme Canvas Container with Horizontal Swipe Transform and Signature Border */}
-                    <div
-                      className="relative flex items-center justify-center transition-transform"
-                      style={{
-                        transform: `translateX(${lightboxSwipeDelta}px)`,
-                        transition: isLightboxSwiping ? 'none' : 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)',
-                      }}
-                    >
-                      <img
-                        src={currentLightboxMeme.url}
-                        alt={currentLightboxMeme.title}
-                        className="max-h-[50vh] max-w-[92vw] sm:max-h-[54vh] w-auto h-auto object-contain border-[3px] border-secondary-container shadow-[6px_6px_0px_#000000] bg-black select-none pointer-events-none"
-                        draggable={false}
-                      />
-                    </div>
-
-                    {/* Meme Meta Title & Author */}
-                    <div className="text-center px-4 mt-2.5 max-w-[90vw]">
-                      <h3 className="font-label-xl text-[14px] sm:text-[15px] text-white font-extrabold truncate uppercase tracking-tight">
-                        {currentLightboxMeme.title || 'MEME CAPSULE DROP'}
-                      </h3>
-                      <p className="font-mono text-[11px] text-[#A855F7] mt-0.5 uppercase tracking-wide font-bold">
-                        @{currentLightboxMeme.author} {currentLightboxMeme.subreddit ? `• r/${currentLightboxMeme.subreddit}` : ''}
-                      </p>
-                    </div>
-
-                    {/* Primary CTAs Toolbar: SAVE, SHARE, REMOVE - Placed JUST BELOW the meme canvas! */}
-                    <div
-                      className="w-full max-w-[360px] px-2 mt-3 flex flex-col gap-2 select-none"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="grid grid-cols-3 gap-2 w-full">
-                        {/* 1. SAVE */}
-                        <button
-                          type="button"
-                          onClick={() => downloadMeme(currentLightboxMeme)}
-                          className="flex items-center justify-center gap-1.5 h-[48px] px-2 bg-[#FACC15] hover:bg-[#ffe043] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[12px] sm:text-[13px] uppercase tracking-wider"
-                          title="Save / Download Meme"
-                        >
-                          <Download size={18} strokeWidth={2.8} />
-                          <span>SAVE</span>
-                        </button>
-
-                        {/* 2. SHARE */}
-                        <button
-                          type="button"
-                          onClick={() => shareMeme(currentLightboxMeme)}
-                          className="flex items-center justify-center gap-1.5 h-[48px] px-2 bg-[#00E5FF] hover:bg-[#60f1ff] text-black border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[12px] sm:text-[13px] uppercase tracking-wider"
-                          title="Share Meme"
-                        >
-                          <Share2 size={18} strokeWidth={2.8} />
-                          <span>SHARE</span>
-                        </button>
-
-                        {/* 3. REMOVE */}
-                        <button
-                          type="button"
-                          onClick={handleDeleteCurrentInLightbox}
-                          className="flex items-center justify-center gap-1.5 h-[48px] px-2 bg-[#FF2A85] hover:bg-[#ff55a0] text-white border-[3px] border-black shadow-[3px_3px_0px_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none transition-all cursor-pointer font-black font-mono text-[12px] sm:text-[13px] uppercase tracking-wider"
-                          title="Remove from Vault"
-                        >
-                          <Trash2 size={18} strokeWidth={2.8} />
-                          <span>REMOVE</span>
-                        </button>
-                      </div>
-
-                      {/* Secondary Action Row: LIKE, SWIPE HINT, and PIN */}
-                      <div className="flex items-center justify-between px-2 pt-1 border-t border-white/10 text-outline">
-                        <button
-                          type="button"
-                          onClick={() => toggleLike(currentLightboxMeme)}
-                          className={`flex items-center gap-1.5 text-[11px] font-mono font-bold uppercase transition-all cursor-pointer active:scale-95 ${
-                            likedMemes.includes(currentLightboxMeme.url) ? 'text-[#FF2A85]' : 'text-neutral-400 hover:text-white'
-                          }`}
-                        >
-                          <Heart
-                            size={15}
-                            strokeWidth={2.6}
-                            fill={likedMemes.includes(currentLightboxMeme.url) ? '#FF2A85' : 'none'}
-                          />
-                          <span>{likedMemes.includes(currentLightboxMeme.url) ? 'LIKED' : 'LIKE'}</span>
-                        </button>
-
-                        <div className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest font-bold">
-                          SWIPE TO BROWSE
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handlePin(currentLightboxMeme)}
-                          className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-[#A855F7] hover:text-[#C084FC] uppercase transition-all cursor-pointer active:scale-95"
-                        >
-                          <LayoutGrid size={15} strokeWidth={2.6} />
-                          <span>PIN TO BOARD</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Native Photo-Gallery Style Preview Bottom Sheet */}
+              <VaultPreviewSheet
+                isOpen={vaultLightboxIndex !== null && currentLightboxMeme !== null}
+                initialIndex={vaultLightboxIndex ?? 0}
+                memes={filteredFavorites}
+                onClose={() => setVaultLightboxIndex(null)}
+                likedMemes={likedMemes}
+                onToggleLike={toggleLike}
+                onRemoveFromVault={(target) => {
+                  toggleFavorite(target);
+                  showToast('MEME REMOVED FROM VAULT', 'tertiary');
+                }}
+                pinnedMemes={pinnedMemes}
+                moodBoards={moodBoards}
+                onOpenPin={(target) => {
+                  setBoardPickerTargetMeme(target);
+                  setShowBoardPicker(true);
+                }}
+                onShare={shareMeme}
+                onDownload={downloadMeme}
+                onOpenRedditInfo={(target) => {
+                  setRedditInfoMeme(target);
+                  setIsRedditInfoOpen(true);
+                }}
+                onOpenReport={(target) => {
+                  setReportTargetMeme(target);
+                  setIsReportModalOpen(true);
+                }}
+              />
             </section>
           );
         })()}
