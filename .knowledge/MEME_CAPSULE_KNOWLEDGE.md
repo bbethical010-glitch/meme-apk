@@ -377,6 +377,14 @@ Registered on the Android WebView as `window.MemeCapsuleAndroid`:
 - **Meme Vault:** Persistent offline favorites list stored in `localStorage('meme_favorites')` with instant client-side search. Free tier users can save up to 20 memes (`FREE_VAULT_LIMIT = 20`); Pro users have unlimited storage.
 - **Mood Boards ("Pinned Energy"):** Color-coded thematic binders (`primary`, `secondary`, `tertiary`) created via `CreateBoardModal.tsx`.
 - **Pinboard Synchronization:** When a meme is pinned to a board, the system synchronizes both `meme_pinboard` and `meme_favorites` records to guarantee that pinned meme thumbnails always render reliably even if the meme was not previously saved to the main vault.
+- **Gallery-Style Preview Bottom Sheet (`VaultPreviewSheet.tsx`):**
+  - **Docking Physics & Peeking Scrim:** Rises from `dockOffsetBottom = 'calc(60px + max(env(safe-area-inset-bottom, 0px), 16px))'` over 320ms, leaving the top ~12% (~104px) of the Meme Vault screen visible behind a dimmed/blurred scrim (`bg-black/70 backdrop-blur-[4px]`).
+  - **Header Row (Section A):** Neo-Brutalist counter box `[active / total]`, Reddit info CTA (orange) or Curated report CTA (red), and pink close button `×`.
+  - **Main Meme Preview Stage (Section B):** Zero-text stage where the meme is the hero (no title, author, or subreddit clutter). The purple border frame (`border-[3px] border-[#9b30ff] shadow-[4px_4px_0px_#f4c300]`) tightly hugs the meme's natural aspect ratio, completely eliminating pillarboxes and letterboxes.
+  - **3-Slot Virtualized Sliding Carousel:** Native smartphone gallery horizontal swiping (`[prev, current, next]`) with 1:1 finger tracking, 0.28x boundary rubber-banding, velocity commit (`|vx| > 0.4px/ms`), and strict gesture axis-locking between horizontal swipe and vertical sheet dismissal.
+  - **4-Button Neo-Brutalist CTA Row (Section C):** 100% Home Feed parity featuring `LIKE` (#FF2A85), `REMOVE` (#A855F7), `PIN` (#FACC15), and `MORE` (#00E5FF) with upward popover (`SHARE`, `DOWNLOAD`, `REPORT`), tactile press physics, and the full 3-layer ink-burst (`.ink-ripple`, 6-tick radial SVG burst, and icon bounce).
+  - **Horizontal Thumbnail Filmstrip (Section D):** Auto-centering horizontal thumbnail tray with active 54px yellow-bordered thumbnail and indicator bar, inactive 48px thumbnails, and bottom gesture bar.
+  - **Sub-Modal Stacking:** Root modals (`BoardPicker`, `RedditInfoModal`, `ReportModal`) elevated to `z-[1070]` so they seamlessly display on top of the preview sheet without collisions.
 
 ### 3.8 Mobile Monetization (AdMob + Google Play In-App Purchases & Neo-Brutalist Store)
 - **Google AdMob:**

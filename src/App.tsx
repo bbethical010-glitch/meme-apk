@@ -2942,7 +2942,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
           <>
             {/* Dimmed backdrop */}
             <div
-              className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[1065] animate-fadeIn"
+              className="fixed inset-0 bg-black/75 backdrop-blur-sm z-[1070] animate-fadeIn"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
@@ -2954,7 +2954,7 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
             <div
               onPointerDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
-              className="fixed bottom-0 left-0 right-0 z-[1065] flex flex-col bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-secondary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] max-w-[480px] mx-auto animate-pin-sheet pb-safe select-none text-on-surface"
+              className="fixed bottom-0 left-0 right-0 z-[1070] flex flex-col bg-[#1c1b1b] border-t-[4px] border-x-[4px] border-secondary-container shadow-[0px_-8px_30px_rgba(0,0,0,0.85)] max-w-[480px] mx-auto animate-pin-sheet pb-safe select-none text-on-surface"
               style={{ touchAction: 'pan-y' }}
             >
               {/* Neo-Brutalist Drag Handle Bar */}
@@ -4027,6 +4027,10 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
               ? filteredFavorites[vaultLightboxIndex]
               : null;
 
+          const handleDeleteCurrentInLightbox = (target: Meme) => {
+            toggleFavorite(target);
+          };
+
           const handleBatchDownload = async () => {
             if (vaultSelectedUrls.size === 0) return;
             const selected = favorites.filter((f) => vaultSelectedUrls.has(f.url));
@@ -4351,29 +4355,27 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
 
               {/* Native Photo-Gallery Style Preview Bottom Sheet */}
               <VaultPreviewSheet
-                isOpen={vaultLightboxIndex !== null && currentLightboxMeme !== null}
+                isOpen={vaultLightboxIndex !== null && filteredFavorites.length > 0}
                 initialIndex={vaultLightboxIndex ?? 0}
                 memes={filteredFavorites}
                 onClose={() => setVaultLightboxIndex(null)}
+                onIndexChange={(newIdx) => setVaultLightboxIndex(newIdx)}
                 likedMemes={likedMemes}
                 onToggleLike={toggleLike}
-                onRemoveFromVault={(target) => {
-                  toggleFavorite(target);
-                  showToast('MEME REMOVED FROM VAULT', 'tertiary');
-                }}
+                onRemoveMeme={handleDeleteCurrentInLightbox}
                 pinnedMemes={pinnedMemes}
                 moodBoards={moodBoards}
-                onOpenPin={(target) => {
+                onOpenPinModal={(target) => {
                   setBoardPickerTargetMeme(target);
                   setShowBoardPicker(true);
                 }}
-                onShare={shareMeme}
-                onDownload={downloadMeme}
-                onOpenRedditInfo={(target) => {
+                onShareMeme={shareMeme}
+                onDownloadMeme={downloadMeme}
+                onOpenRedditModal={(target) => {
                   setRedditInfoMeme(target);
                   setIsRedditInfoOpen(true);
                 }}
-                onOpenReport={(target) => {
+                onOpenReportModal={(target) => {
                   setReportTargetMeme(target);
                   setIsReportModalOpen(true);
                 }}
