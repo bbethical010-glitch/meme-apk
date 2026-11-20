@@ -4022,11 +4022,6 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
           const redditInVault = favorites.filter((f) => f.source === 'Reddit').length;
           const curatedInVault = favorites.filter((f) => f.source !== 'Reddit').length;
 
-          const currentLightboxMeme =
-            vaultLightboxIndex !== null && vaultLightboxIndex >= 0 && vaultLightboxIndex < filteredFavorites.length
-              ? filteredFavorites[vaultLightboxIndex]
-              : null;
-
           const handleDeleteCurrentInLightbox = (target: Meme) => {
             toggleFavorite(target);
           };
@@ -4354,32 +4349,34 @@ const fetchValidMeme = async (nextViewed: number, maxRetries = 35): Promise<Meme
               </div>
 
               {/* Native Photo-Gallery Style Preview Bottom Sheet */}
-              <VaultPreviewSheet
-                isOpen={vaultLightboxIndex !== null && filteredFavorites.length > 0}
-                initialIndex={vaultLightboxIndex ?? 0}
-                memes={filteredFavorites}
-                onClose={() => setVaultLightboxIndex(null)}
-                onIndexChange={(newIdx) => setVaultLightboxIndex(newIdx)}
-                likedMemes={likedMemes}
-                onToggleLike={toggleLike}
-                onRemoveMeme={handleDeleteCurrentInLightbox}
-                pinnedMemes={pinnedMemes}
-                moodBoards={moodBoards}
-                onOpenPinModal={(target) => {
-                  setBoardPickerTargetMeme(target);
-                  setShowBoardPicker(true);
-                }}
-                onShareMeme={shareMeme}
-                onDownloadMeme={downloadMeme}
-                onOpenRedditModal={(target) => {
-                  setRedditInfoMeme(target);
-                  setIsRedditInfoOpen(true);
-                }}
-                onOpenReportModal={(target) => {
-                  setReportTargetMeme(target);
-                  setIsReportModalOpen(true);
-                }}
-              />
+              {vaultLightboxIndex !== null && (
+                <VaultPreviewSheet
+                  isOpen={vaultLightboxIndex !== null}
+                  initialIndex={vaultLightboxIndex}
+                  memes={filteredFavorites}
+                  onClose={() => setVaultLightboxIndex(null)}
+                  onIndexChange={(newIdx) => setVaultLightboxIndex(newIdx)}
+                  likedMemes={likedMemes}
+                  pinnedMemes={pinnedMemes}
+                  moodBoards={moodBoards}
+                  onToggleLike={toggleLike}
+                  onRemoveMeme={handleDeleteCurrentInLightbox}
+                  onOpenPinModal={(target) => {
+                    setBoardPickerTargetMeme(target);
+                    setShowBoardPicker(true);
+                  }}
+                  onShareMeme={shareMeme}
+                  onDownloadMeme={downloadMeme}
+                  onOpenReportModal={(target) => {
+                    setReportTargetMeme(target);
+                    setIsReportModalOpen(true);
+                  }}
+                  onOpenRedditModal={(target) => {
+                    setRedditInfoMeme(target);
+                    setIsRedditInfoOpen(true);
+                  }}
+                />
+              )}
             </section>
           );
         })()}
